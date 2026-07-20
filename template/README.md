@@ -22,6 +22,8 @@ corepack enable && yarn install && yarn build
    contributed type must be prefixed with your plugin id *and* listed in
    `manifest.json`, or Studio throws at load.
 
+See the [plugin authoring guide](../docs/authoring.md) for the full API.
+
 Drop `src/runtime.ts` and the `runtime` entry from `manifest.json` if your
 plugin only adds editor tooling. Drop `src/main.ts` and the `studio` entry if it
 only adds game behaviour.
@@ -35,7 +37,9 @@ only adds game behaviour.
 | `src/main.ts`                   | Studio entry — runs in the editor, has an unload lifecycle.       |
 | `src/runtime.ts`                | Runtime entry — runs in the game, no unload lifecycle.            |
 | `src/nodes.ts`                  | Shared node definitions, so the two entries cannot drift.         |
-| `types/narraleaf-studio.d.ts`   | Ambient types for the host modules. See the note in that file.    |
+
+Types come from the `narraleaf-studio` dev dependency, generated from Studio's
+source — there is no declaration file to keep in sync by hand.
 
 ## Scripts
 

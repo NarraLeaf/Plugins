@@ -78,9 +78,9 @@ plugins/<plugin-id>/     每个插件一个目录，目录名必须与插件 id 
   yarn.lock              需提交；每个插件独立解析依赖
   build.mjs              把声明的各个入口打包进 dist/
   src/                   插件源码
-  types/                 宿主模块的环境声明
- 
+
 template/                起步模板 —— 从复制它开始
+docs/                    插件开发指南
 scripts/                 索引工具（零依赖 Node ESM）
 schema/                  manifest.json 与 index.json 的 JSON Schema
 index.json               生成的索引文件
@@ -101,45 +101,24 @@ yarn install
 yarn build               # -> dist/
 ```
 
-然后编辑 `manifest.json`：
+**→ [插件开发指南](docs/authoring.zh-CN.md)** 深入介绍了其余内容：两个入口分别在什么
+场景下需要、manifest 的逐字段说明、蓝图节点与引脚、widget、权限、类型包，以及插件系统
+当前的限制。
 
-| 字段              | 规则                                                          |
-| ----------------- | ------------------------------------------------------------- |
-| `manifestVersion` | 必须正好是 `2`。Studio 会直接拒绝 v1。                        |
-| `id`              | `publisher.plugin-name`，小写。**目录名必须与之一致。**        |
-| `version`         | 语义化版本，必须与 `package.json` 的 `version` 相同。          |
-| `entries`         | `studio` / `runtime` 至少有一个，各指向 `dist/` 中已打包的 ESM 文件。 |
-| `contributes`     | 你注册的所有蓝图节点与 widget 类型，必须以插件 id 为前缀。     |
-| `permissions`     | 只写真正需要的 —— 用户在安装时会看到。                        |
+有三点最容易踩坑，先说在前面：
 
-任何运行时注册的东西都**必须**在 `contributes` 中声明，否则 Studio 在加载时会抛错。
-这样设计是为了让 Studio 无需执行插件代码就能静态校验一个项目。
+- **注册的一切都必须在 `contributes` 中声明**，并以插件 id 为前缀 —— 否则 Studio 会在
+  加载时抛错。这样设计是为了让 Studio 无需执行插件代码就能校验项目。
+- **宿主模块必须设为 `external`**（`narraleaf-studio/*`、`react`、`react-dom`）。把
+  React 打包进去会产生第二个 React 实例，hook 会以各种看不出真实原因的方式失效。
+- **蓝图节点需要两个入口**才能在正式构建中生效。只从 `studio` 入口注册，意味着它在创作
+  时正常、在构建里悄无声息地什么都不做。
 
-另外要在 `package.json` 中填写 `narraleaf.categories`（可选值：`blueprint`、`ui`、
-`assets`、`story`、`workflow`、`integration`、`theme`、`other`）。
+类型来自 `narraleaf-studio` 包，由 Studio 源码生成：
 
-### 两个入口
-
-插件可以面向编辑器、面向游戏，或两者都要。
-
-| 入口      | 运行环境                                | 能拿到什么                                                  |
-| --------- | --------------------------------------- | ----------------------------------------------------------- |
-| `studio`  | 编辑器                                  | `app.services`（白名单）+ `app.privileged`（受审计）        |
-| `runtime` | 游戏 —— Dev Mode、预览、正式构建        | 仅 `app.game`：蓝图节点、widget、`log()`                    |
-
-两者在物理上是隔离的：在 runtime 入口里 import `narraleaf-studio/plugin` 会抛错。
-如果某个蓝图节点既要出现在编辑器面板中、又要在正式构建里执行，就把定义放到共享模块，
-然后从两个入口分别注册 —— `template/src/nodes.ts` 就是这么做的。
-
-`studio` 入口有卸载生命周期，`runtime` 入口没有（游戏环境每个进程只加载一次）。
-
-### 类型
-
-Studio 目前尚未发布 `narraleaf-studio/plugin` 和 `narraleaf-studio/runtime` 的类型
-包 —— 这两个标识符只在运行时通过宿主安装的 import map 解析。在类型包发布之前，每个
-插件各自携带一份 [`types/narraleaf-studio.d.ts`](template/types/narraleaf-studio.d.ts)。
-其中面向插件的接口是准确的；编辑器内部的深层结构则有意写得宽松。遇到那些宽松类型时，
-请用运行时检查，不要依赖类型。
+```bash
+yarn add -D narraleaf-studio
+```
 
 ### 本地测试
 

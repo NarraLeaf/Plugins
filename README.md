@@ -82,9 +82,9 @@ plugins/<plugin-id>/     one directory per plugin, named exactly after its id
   yarn.lock              committed; each plugin resolves independently
   build.mjs              bundles each declared entry into dist/
   src/                   plugin source
-  types/                 ambient declarations for the host modules
 
 template/                starter plugin — copy this to begin
+docs/                    the plugin authoring guide
 scripts/                 registry tooling (dependency-free Node ESM)
 schema/                  JSON Schemas for manifest.json and index.json
 index.json               generated registry index
@@ -106,49 +106,28 @@ yarn install
 yarn build               # -> dist/
 ```
 
-Then edit `manifest.json`:
+**→ [The plugin authoring guide](docs/authoring.md)** covers the rest in depth:
+the two entries and when you need each, the manifest field by field, blueprint
+nodes and pins, widgets, permissions, the type package, and the current limits
+of the plugin system.
 
-| Field            | Rule                                                                       |
-| ---------------- | -------------------------------------------------------------------------- |
-| `manifestVersion`| Must be exactly `2`. Studio hard-rejects v1.                                |
-| `id`             | `publisher.plugin-name`, lowercase. **The directory must be named after it.** |
-| `version`        | Semver. Must match `package.json` `version`.                                |
-| `entries`        | At least one of `studio` / `runtime`, each a prebundled ESM file in `dist/`. |
-| `contributes`    | Every blueprint node and widget type you register, prefixed with your id.   |
-| `permissions`    | Only what you actually need — users see this at install.                    |
+Three things that catch people out, up front:
 
-Anything you register at runtime **must** be declared in `contributes`, or
-Studio throws at load. This exists so Studio can validate a project statically
-without executing plugin code.
+- **Everything you register must be declared** in `contributes`, prefixed with
+  your plugin id — Studio throws at load otherwise. It exists so Studio can
+  validate a project without executing plugin code.
+- **The host modules must be `external`** in your bundler (`narraleaf-studio/*`,
+  `react`, `react-dom`). Bundling React gives you a second React instance and
+  hooks fail in ways that look like anything but the real cause.
+- **A blueprint node needs both entries** to work in a shipped game. Registering
+  it only from the `studio` entry means it works while authoring and silently
+  does nothing in a build.
 
-Also set `narraleaf.categories` in `package.json` (one or more of `blueprint`,
-`ui`, `assets`, `story`, `workflow`, `integration`, `theme`, `other`).
+Types come from the `narraleaf-studio` package, generated from Studio's source:
 
-### The two entries
-
-A plugin can target the editor, the game, or both.
-
-| Entry     | Runs in                                        | Gets                                                            |
-| --------- | ---------------------------------------------- | --------------------------------------------------------------- |
-| `studio`  | The editor                                     | `app.services` (curated whitelist) + `app.privileged` (audited)  |
-| `runtime` | The game — Dev Mode, Preview, Production builds | `app.game` only: blueprint nodes, widgets, `log()`               |
-
-The two are physically isolated: importing `narraleaf-studio/plugin` from a
-runtime entry throws. If a blueprint node should both appear in the editor
-palette *and* execute in a shipped build, put the definition in a shared module
-and register it from both entries — that is what `template/src/nodes.ts` does.
-
-The `studio` entry has an unload lifecycle; the `runtime` entry does not (game
-environments load once per process).
-
-### Types
-
-Studio does not yet publish a types package for `narraleaf-studio/plugin` and
-`narraleaf-studio/runtime` — these specifiers resolve only at runtime, via an
-import map the host installs. Until it does, each plugin carries a copy of
-[`types/narraleaf-studio.d.ts`](template/types/narraleaf-studio.d.ts). The
-plugin-facing surface in it is accurate; deep editor structures are typed
-permissively on purpose. Prefer a runtime check over trusting a loose type there.
+```bash
+yarn add -D narraleaf-studio
+```
 
 ### Local testing
 
