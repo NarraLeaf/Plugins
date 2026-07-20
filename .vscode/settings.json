@@ -1,0 +1,17 @@
+{
+  "//": "Maps the repo's JSON Schemas onto the files they describe, so manifests validate as you type. Mapped here rather than via a $schema key in each manifest, because the relative depth differs between template/ and plugins/<id>/ and a copied-then-stale path fails silently.",
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "/plugins/*/manifest.json",
+        "/template/manifest.json"
+      ],
+      "url": "./schema/manifest.schema.json"
+    },
+    {
+      "fileMatch": ["/index.json"],
+      "url": "./schema/index.schema.json"
+    }
+  ],
+  "files.eol": "\n"
+}

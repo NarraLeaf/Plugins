@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/NarraLeaf/Plugins/blob/master/schema/manifest.schema.json",
+  "title": "NarraLeaf Studio plugin manifest (v2)",
+  "description": "Mirrors Studio's validator at src/shared/utils/pluginManifest.ts. Editor tooling only — scripts/validate.mjs is authoritative.",
+  "type": "object",
+  "required": ["manifestVersion", "id", "name", "version", "entries"],
+  "additionalProperties": true,
+  "properties": {
+    "manifestVersion": {
+      "const": 2,
+      "description": "Must be exactly 2. Studio hard-rejects v1."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+      "description": "Namespaced lowercase id, e.g. publisher.plugin-name. The plugin directory must be named after it."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Display name shown in Studio."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+([-+][0-9A-Za-z.-]+)?$",
+      "description": "Semver. Must match package.json version."
+    },
+    "description": { "type": "string" },
+    "publisher": { "type": "string" },
+    "entries": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "At least one target. Each value is a prebundled ESM file relative to the package root.",
+      "properties": {
+        "studio": { "$ref": "#/definitions/relativeEntry" },
+        "runtime": { "$ref": "#/definitions/relativeEntry" }
+      }
+    },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Every type the plugin registers. Undeclared registrations throw at load.",
+      "properties": {
+        "blueprintNodes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Blueprint node types, each prefixed with the plugin id."
+        },
+        "widgets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Widget types, each prefixed with the plugin id."
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "description": "Shown to the user at install time. Request the minimum.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["kind", "path", "mode", "recursive"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "const": "filesystem" },
+              "path": { "type": "string", "minLength": 1 },
+              "mode": { "enum": ["read", "write", "readwrite"] },
+              "recursive": { "type": "boolean" }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["kind", "capability"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "const": "api" },
+              "capability": { "type": "string", "minLength": 1 }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "relativeEntry": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[^\\u0000?#]+$",
+      "description": "Relative path inside the package. No absolute paths, no parent traversal."
+    }
+  }
+}

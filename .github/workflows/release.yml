@@ -1,0 +1,104 @@
+name: Release
+
+# Tags are the release mechanism: pushing `<plugin-id>@<version>` publishes
+# exactly that plugin at exactly that version. Every other plugin is untouched,
+# so plugins version independently in one repository.
+on:
+  push:
+    tags:
+      - "*@*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+
+      - name: Parse tag
+        id: tag
+        run: |
+          node -e "
+            import('./scripts/lib/plugins.mjs').then(m => {
+              const parsed = m.parseReleaseTag(process.env.TAG);
+              if (!parsed) {
+                console.error('Tag must be <plugin-id>@<version>, e.g. narraleaf.quick-save@1.0.0');
+                process.exit(1);
+              }
+              console.log('id=' + parsed.id);
+              console.log('version=' + parsed.version);
+              console.log('asset=' + m.releaseAssetName(parsed.id, parsed.version));
+            });
+          " >> "$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ github.ref_name }}
+
+      # The tag must agree with what is committed, otherwise the published
+      # artifact would not match the source anyone can read at that tag.
+      - name: Verify tag matches committed version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const id = process.env.ID;
+            const version = process.env.VERSION;
+            const dir = 'plugins/' + id;
+            if (!fs.existsSync(dir)) {
+              console.error('No such plugin: ' + dir);
+              process.exit(1);
+            }
+            const manifest = JSON.parse(fs.readFileSync(dir + '/manifest.json', 'utf-8'));
+            if (manifest.version !== version) {
+              console.error('Tag version ' + version + ' != manifest.json version ' + manifest.version);
+              process.exit(1);
+            }
+            const index = JSON.parse(fs.readFileSync('index.json', 'utf-8'));
+            const entry = index.plugins.find(p => p.id === id);
+            if (!entry) {
+              console.error(id + ' is not listed in index.json — merge the registry entry before tagging');
+              process.exit(1);
+            }
+            if (entry.version !== version) {
+              console.error('index.json lists ' + id + '@' + entry.version + ' — regenerate and merge it before tagging');
+              process.exit(1);
+            }
+            console.log('Tag, manifest and index.json all agree on ' + id + '@' + version);
+          "
+        env:
+          ID: ${{ steps.tag.outputs.id }}
+          VERSION: ${{ steps.tag.outputs.version }}
+
+      - name: Validate
+        run: node scripts/validate.mjs ${{ steps.tag.outputs.id }}
+
+      - name: Install (immutable)
+        working-directory: plugins/${{ steps.tag.outputs.id }}
+        run: yarn install --immutable
+
+      - name: Typecheck
+        working-directory: plugins/${{ steps.tag.outputs.id }}
+        run: yarn typecheck
+
+      - name: Build and package
+        run: node scripts/package-plugin.mjs ${{ steps.tag.outputs.id }}
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.tag.outputs.id }} ${{ steps.tag.outputs.version }}
+          files: .out/${{ steps.tag.outputs.asset }}
+          fail_on_unmatched_files: true
+          body: |
+            **${{ steps.tag.outputs.id }}** v${{ steps.tag.outputs.version }}
+
+            Download `${{ steps.tag.outputs.asset }}`, unzip it, then in NarraLeaf Studio open
+            **Launcher → Plugins → Install from folder** and select the unzipped
+            `${{ steps.tag.outputs.id }}` folder.
+
+            Source: [`plugins/${{ steps.tag.outputs.id }}`](https://github.com/NarraLeaf/Plugins/tree/${{ github.ref_name }}/plugins/${{ steps.tag.outputs.id }})

@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+*.json    text
+*.md      text
+*.ts      text
+*.tsx     text
+*.mjs     text
+*.yml     text
+
+yarn.lock  linguist-generated=true -diff
+*.png      binary
+*.jpg      binary
+*.gif      binary
+*.webp     binary

@@ -1,0 +1,35 @@
+{
+  "name": "@narraleaf-plugins/starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Template plugin: one blueprint node registered on both the studio and runtime targets.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "keywords": [
+    "narraleaf",
+    "narraleaf-studio-plugin",
+    "template"
+  ],
+  "packageManager": "yarn@4.10.3",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  },
+  "narraleaf": {
+    "categories": [
+      "blueprint"
+    ],
+    "studioVersion": ">=0.0.1",
+    "locales": {
+      "zh-CN": {
+        "name": "入门插件",
+        "description": "模板插件：在 studio 与 runtime 两个目标上注册同一个蓝图节点。"
+      }
+    }
+  }
+}

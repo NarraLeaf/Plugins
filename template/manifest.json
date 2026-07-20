@@ -1,0 +1,18 @@
+{
+  "manifestVersion": 2,
+  "id": "example.starter",
+  "name": "Starter Plugin",
+  "version": "0.1.0",
+  "description": "Template plugin: one blueprint node registered on both the studio and runtime targets.",
+  "publisher": "Example",
+  "entries": {
+    "studio": "main.js",
+    "runtime": "runtime.js"
+  },
+  "contributes": {
+    "blueprintNodes": [
+      "example.starter.log"
+    ]
+  },
+  "permissions": []
+}

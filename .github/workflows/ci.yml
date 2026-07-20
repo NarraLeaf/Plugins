@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master, develop]
+
+jobs:
+  registry:
+    name: Registry
+    runs-on: ubuntu-latest
+    outputs:
+      plugins: ${{ steps.discover.outputs.plugins }}
+      has-plugins: ${{ steps.discover.outputs.has-plugins }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Runs the same manifest validator Studio uses at install time, so a
+      # plugin that passes CI is one Studio will accept.
+      - name: Validate manifests
+        run: node scripts/validate.mjs
+
+      - name: Check index.json is in sync
+        run: node scripts/generate-index.mjs --check
+
+      - name: Discover plugins
+        id: discover
+        run: |
+          plugins=$(node -e "import('./scripts/lib/plugins.mjs').then(m => console.log(JSON.stringify(m.listPluginDirs())))")
+          echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
+          if [ "$plugins" = "[]" ]; then
+            echo "has-plugins=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-plugins=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build ${{ matrix.plugin }}
+    needs: registry
+    if: needs.registry.outputs.has-plugins == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJSON(needs.registry.outputs.plugins) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Each plugin pins its own Yarn via "packageManager" and resolves its own
+      # dependencies — there is no shared lockfile or hoisted node_modules.
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install (immutable)
+        working-directory: plugins/${{ matrix.plugin }}
+        run: yarn install --immutable
+
+      - name: Typecheck
+        working-directory: plugins/${{ matrix.plugin }}
+        run: yarn typecheck
+
+      # Also proves the built output matches what manifest.json declares.
+      - name: Build and package
+        run: node scripts/package-plugin.mjs ${{ matrix.plugin }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.plugin }}
+          path: .out/*.zip
+          if-no-files-found: error
+
+  template:
+    name: Build template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+
+      # The starter is not indexed, but every new plugin is copied from it —
+      # an unbuilt template rots silently and takes new contributors with it.
+      - name: Install (immutable)
+        working-directory: template
+        run: yarn install --immutable
+
+      - name: Typecheck
+        working-directory: template
+        run: yarn typecheck
+
+      - name: Build
+        working-directory: template
+        run: yarn build

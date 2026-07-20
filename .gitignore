@@ -1,0 +1,19 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Yarn 4 (nodeLinker: node-modules) — lockfiles ARE committed, caches are not.
+# Globbed, not root-anchored: every plugin has its own .yarn directory.
+**/.yarn/*
+!**/.yarn/patches
+!**/.yarn/releases
+.pnp.*
+
+# Local packaging output from scripts/package-plugin.mjs
+.out/

@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema/index.schema.json",
+  "formatVersion": 1,
+  "repository": "https://github.com/NarraLeaf/Plugins",
+  "plugins": []
+}
