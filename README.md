@@ -55,6 +55,30 @@ Full details in [CONTRIBUTING.md](CONTRIBUTING.md). The short version:
 
 Releases are per-plugin: bump `version` in `manifest.json` and `package.json`, regenerate `index.json`, merge to `master`, and push the tag (`git tag narraleaf.example@1.0.0`). The release workflow refuses to publish if the tag, manifest, and index disagree.
 
+## Releasing (maintainers)
+
+Releases are per-plugin and are triggered by **pushing a `<plugin-id>@<version>` tag** — nothing else publishes. The [release workflow](.github/workflows/release.yml) refuses to publish unless the tag, the plugin's `manifest.json` version, and its `index.json` entry all agree, so the registry entry must be merged **before** you tag.
+
+1. **Merge the plugin PR into `develop`.** CI runs; nothing is published yet.
+2. **Merge `develop` into `master`** — `master` only advances through release merges, so this is a merge commit (a fast-forward won't apply once `master` carries release-merge history). Open a PR from `develop` to `master` and merge it, or locally:
+
+   ```bash
+   git checkout master && git pull
+   git merge origin/develop        # creates the release merge commit
+   git push origin master
+   ```
+
+3. **Tag on `master`, then push the tag** — the push is what publishes:
+
+   ```bash
+   git tag <plugin-id>@<version>          # e.g. narraleaf.example@1.0.0
+   git push origin <plugin-id>@<version>  # a local tag alone does nothing
+   ```
+
+4. **Watch it publish:** `gh run watch --workflow Release`. The workflow validates, builds, packages, and attaches `<plugin-id>-<version>.zip` to a GitHub Release. Its download URL is deterministic — `index.json` already points at it.
+
+Updating an existing plugin is the same loop: bump `version` in **both** `manifest.json` and `package.json`, run `node scripts/generate-index.mjs`, merge, then tag the new `<plugin-id>@<version>`.
+
 ## License
 
 The registry tooling is [MPL-2.0](LICENSE), matching NarraLeaf Studio. **Each plugin declares its own license** in its `package.json`; check the plugin before you depend on it.

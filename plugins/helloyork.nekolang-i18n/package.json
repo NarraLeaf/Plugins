@@ -1,0 +1,34 @@
+{
+  "name": "@narraleaf-plugins/nekolang-i18n",
+  "version": "1.0.0",
+  "private": true,
+  "description": "把 Studio 界面变成软萌猫娘语的中文语言包（喵~）。新增一个独立语言「喵语（猫娘语）」，不改动内置简体中文。",
+  "license": "MPL-2.0",
+  "type": "module",
+  "keywords": [
+    "narraleaf",
+    "narraleaf-studio-plugin",
+    "locale",
+    "language-pack",
+    "i18n",
+    "chinese",
+    "catgirl"
+  ],
+  "packageManager": "yarn@4.10.3",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "narraleaf-studio": "^0.2.0",
+    "typescript": "^5.7.0"
+  },
+  "narraleaf": {
+    "categories": [
+      "theme"
+    ],
+    "studioVersion": ">=0.0.1"
+  }
+}
