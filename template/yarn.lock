@@ -192,9 +192,35 @@ __metadata:
   resolution: "@narraleaf-plugins/starter@workspace:."
   dependencies:
     esbuild: "npm:^0.25.0"
+    narraleaf-studio: "npm:^0.2.0"
     typescript: "npm:^5.7.0"
   languageName: unknown
   linkType: soft
+
+"@types/node@npm:^24.8.1":
+  version: 24.13.3
+  resolution: "@types/node@npm:24.13.3"
+  dependencies:
+    undici-types: "npm:~7.18.0"
+  checksum: 10c0/a5bc08f49b9581dcdca90e02cd77197a3c799840807664942e5cd5161a553d4d2ae8064f7e3294410d748d7d098b5c1848be7fa50c06f29c4193ab16be4e59eb
+  languageName: node
+  linkType: hard
+
+"@types/react@npm:^19.2.0":
+  version: 19.2.17
+  resolution: "@types/react@npm:19.2.17"
+  dependencies:
+    csstype: "npm:^3.2.2"
+  checksum: 10c0/bc2c4af96b3e480604424de70d5ebda90c5f4b485df471858c0bc2d7d70364b606ec3c4d8579f94f01aa0c6c0591f56bcf14cba5689f5eea4b74250ccdc3a232
+  languageName: node
+  linkType: hard
+
+"csstype@npm:^3.2.2":
+  version: 3.2.3
+  resolution: "csstype@npm:3.2.3"
+  checksum: 10c0/cd29c51e70fa822f1cecd8641a1445bed7063697469d35633b516e60fe8c1bde04b08f6c5b6022136bb669b64c63d4173af54864510fbb4ee23281801841a3ce
+  languageName: node
+  linkType: hard
 
 "esbuild@npm:^0.25.0":
   version: 0.25.12
@@ -285,6 +311,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"lucide-react@npm:^0.546.0":
+  version: 0.546.0
+  resolution: "lucide-react@npm:0.546.0"
+  peerDependencies:
+    react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+  checksum: 10c0/42ee0bd358517f012297aefb69b54da0b3c62f1ac8485ffa24141b63f05c9f4a682eacc2637c4b13f597aed11f9a8c79627af0c17717400bebb25581daeaad80
+  languageName: node
+  linkType: hard
+
+"narraleaf-studio@npm:^0.2.0":
+  version: 0.2.0
+  resolution: "narraleaf-studio@npm:0.2.0"
+  dependencies:
+    "@types/node": "npm:^24.8.1"
+    "@types/react": "npm:^19.2.0"
+    lucide-react: "npm:^0.546.0"
+  checksum: 10c0/4791c724a5df88f76e47f75095efc56b3d0b27c8a404d1c0e8404681e71937cc3554f25253ded7454efe3018c664bc1339cc3128b391236d1142265c5eb583ad
+  languageName: node
+  linkType: hard
+
 "typescript@npm:^5.7.0":
   version: 5.9.3
   resolution: "typescript@npm:5.9.3"
@@ -302,5 +348,12 @@ __metadata:
     tsc: bin/tsc
     tsserver: bin/tsserver
   checksum: 10c0/ad09fdf7a756814dce65bc60c1657b40d44451346858eea230e10f2e95a289d9183b6e32e5c11e95acc0ccc214b4f36289dcad4bf1886b0adb84d711d336a430
+  languageName: node
+  linkType: hard
+
+"undici-types@npm:~7.18.0":
+  version: 7.18.2
+  resolution: "undici-types@npm:7.18.2"
+  checksum: 10c0/85a79189113a238959d7a647368e4f7c5559c3a404ebdb8fc4488145ce9426fcd82252a844a302798dfc0e37e6fb178ff481ed03bc4caf634c5757d9ef43521d
   languageName: node
   linkType: hard
