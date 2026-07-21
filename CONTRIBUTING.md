@@ -4,8 +4,8 @@ This repository holds **officially licensed** NarraLeaf Studio plugins. Anything
 merged here is distributed under the NarraLeaf name, so submissions are reviewed
 for behaviour and permissions, not just for whether they build.
 
-See [README.md](README.md) for the plugin authoring guide. This document covers
-the process.
+See the [plugin authoring guide](docs/authoring.md) for how to build a plugin.
+This document covers the process for getting one merged.
 
 ## Before you start
 

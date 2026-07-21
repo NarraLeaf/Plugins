@@ -1,14 +1,15 @@
 {
-  "name": "@narraleaf-plugins/starter",
-  "version": "0.1.0",
+  "name": "@narraleaf-plugins/tagged-log",
+  "version": "1.0.0",
   "private": true,
-  "description": "Template plugin: one blueprint node registered on both the studio and runtime targets.",
+  "description": "A blueprint node that composes a tagged log line, [tag]: message, from inspector fields and prints it.",
   "license": "MPL-2.0",
   "type": "module",
   "keywords": [
     "narraleaf",
     "narraleaf-studio-plugin",
-    "template"
+    "blueprint",
+    "log"
   ],
   "packageManager": "yarn@4.10.3",
   "scripts": {
@@ -25,12 +26,6 @@
     "categories": [
       "blueprint"
     ],
-    "studioVersion": ">=0.0.1",
-    "locales": {
-      "zh-CN": {
-        "name": "入门插件",
-        "description": "模板插件：在 studio 与 runtime 两个目标上注册同一个蓝图节点。"
-      }
-    }
+    "studioVersion": ">=0.0.1"
   }
 }

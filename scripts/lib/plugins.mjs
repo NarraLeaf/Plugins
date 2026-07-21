@@ -24,10 +24,15 @@ export const INDEX_FORMAT_VERSION = 1;
 /** Studio only understands manifestVersion 2. v1 is hard-rejected at install. */
 export const PLUGIN_MANIFEST_VERSION = 2;
 export const PLUGIN_ENTRY_TARGETS = ["studio", "runtime"];
-export const PLUGIN_CONTRIBUTES_KEYS = ["blueprintNodes", "widgets"];
+/** Contribution kinds whose value is an array of `<pluginId>.`-prefixed type strings. */
+export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets"];
+/** Every recognized contributes key, including the object-shaped `locales`. */
+export const PLUGIN_CONTRIBUTES_KEYS = [...PLUGIN_CONTRIBUTES_TYPE_KEYS, "locales"];
 
 const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+/** BCP-47-ish locale code: primary subtag plus optional hyphen-joined subtags. */
+const LOCALE_CODE_PATTERN = /^[a-z]{2,3}(-[A-Za-z0-9]+)*$/;
 
 /**
  * Registry-level categories. Kept small on purpose: a long tail of one-off
@@ -195,7 +200,7 @@ export function validatePluginManifest(value) {
             if (unknown.length) {
                 errors.push(`unsupported contributes key(s): ${unknown.join(", ")}`);
             }
-            for (const key of PLUGIN_CONTRIBUTES_KEYS) {
+            for (const key of PLUGIN_CONTRIBUTES_TYPE_KEYS) {
                 const raw = value.contributes[key];
                 if (raw === undefined) {
                     continue;
@@ -212,6 +217,37 @@ export function validatePluginManifest(value) {
                     }
                     if (id && !type.startsWith(`${id}.`)) {
                         errors.push(`contributes.${key} type must be prefixed with the plugin id: ${type}`);
+                    }
+                }
+            }
+
+            const locales = value.contributes.locales;
+            if (locales !== undefined) {
+                if (!Array.isArray(locales)) {
+                    errors.push("contributes.locales must be an array of locale objects");
+                } else {
+                    const seen = new Set();
+                    for (const item of locales) {
+                        if (!isRecord(item)) {
+                            errors.push("contributes.locales entries must be objects");
+                            continue;
+                        }
+                        const code = typeof item.code === "string" ? item.code.trim() : "";
+                        if (!code || !LOCALE_CODE_PATTERN.test(code)) {
+                            errors.push(`contributes.locales entry has an invalid locale code: ${String(item.code)}`);
+                            continue;
+                        }
+                        if (seen.has(code)) {
+                            errors.push(`contributes.locales declares "${code}" more than once`);
+                        }
+                        seen.add(code);
+                        const messages = typeof item.messages === "string" ? item.messages.trim() : "";
+                        if (!messages || !isSafeRelativeEntry(messages)) {
+                            errors.push(`contributes.locales["${code}"].messages must be a relative JSON file path inside the plugin package`);
+                        }
+                        if (item.dir !== undefined && item.dir !== "ltr" && item.dir !== "rtl") {
+                            errors.push(`contributes.locales["${code}"].dir must be "ltr" or "rtl"`);
+                        }
                     }
                 }
             }
@@ -353,6 +389,7 @@ export function toIndexEntry(plugin) {
         contributes: {
             blueprintNodes: [...(manifest.contributes?.blueprintNodes ?? [])],
             widgets: [...(manifest.contributes?.widgets ?? [])],
+            locales: (manifest.contributes?.locales ?? []).map(locale => locale.code),
         },
         permissions: manifest.permissions ?? [],
         release: {
