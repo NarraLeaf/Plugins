@@ -73,6 +73,10 @@ jobs:
         with:
           name: ${{ matrix.plugin }}
           path: .out/*.zip
+          # scripts/package-plugin.mjs writes into .out/, a dotted (hidden)
+          # directory; upload-artifact@v4+ excludes hidden paths by default,
+          # which would drop the zip and trip if-no-files-found: error.
+          include-hidden-files: true
           if-no-files-found: error
 
   template:
