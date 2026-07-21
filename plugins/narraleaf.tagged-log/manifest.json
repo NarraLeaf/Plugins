@@ -1,0 +1,18 @@
+{
+  "manifestVersion": 2,
+  "id": "narraleaf.tagged-log",
+  "name": "Tagged Log",
+  "version": "1.0.0",
+  "description": "A blueprint node that composes a tagged log line, [tag]: message, from inspector fields and prints it.",
+  "publisher": "NarraLeaf",
+  "entries": {
+    "studio": "main.js",
+    "runtime": "runtime.js"
+  },
+  "contributes": {
+    "blueprintNodes": [
+      "narraleaf.tagged-log.print"
+    ]
+  },
+  "permissions": []
+}

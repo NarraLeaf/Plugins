@@ -2,5 +2,42 @@
   "$schema": "./schema/index.schema.json",
   "formatVersion": 1,
   "repository": "https://github.com/NarraLeaf/Plugins",
-  "plugins": []
+  "plugins": [
+    {
+      "id": "narraleaf.tagged-log",
+      "name": "Tagged Log",
+      "version": "1.0.0",
+      "description": "A blueprint node that composes a tagged log line, [tag]: message, from inspector fields and prints it.",
+      "publisher": "NarraLeaf",
+      "path": "plugins/narraleaf.tagged-log",
+      "targets": [
+        "studio",
+        "runtime"
+      ],
+      "categories": [
+        "blueprint"
+      ],
+      "keywords": [
+        "narraleaf",
+        "narraleaf-studio-plugin",
+        "blueprint",
+        "log"
+      ],
+      "license": "MPL-2.0",
+      "contributes": {
+        "blueprintNodes": [
+          "narraleaf.tagged-log.print"
+        ],
+        "widgets": [],
+        "locales": []
+      },
+      "permissions": [],
+      "release": {
+        "tag": "narraleaf.tagged-log@1.0.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.tagged-log%401.0.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.tagged-log%401.0.0/narraleaf.tagged-log-1.0.0.zip"
+      },
+      "studioVersion": ">=0.0.1"
+    }
+  ]
 }
