@@ -60,11 +60,11 @@ Releases are per-plugin: bump `version` in `manifest.json` and `package.json`, r
 Releases are per-plugin and are triggered by **pushing a `<plugin-id>@<version>` tag** — nothing else publishes. The [release workflow](.github/workflows/release.yml) refuses to publish unless the tag, the plugin's `manifest.json` version, and its `index.json` entry all agree, so the registry entry must be merged **before** you tag.
 
 1. **Merge the plugin PR into `develop`.** CI runs; nothing is published yet.
-2. **Advance `master` to `develop`** — `master` only moves through release merges:
+2. **Merge `develop` into `master`** — `master` only advances through release merges, so this is a merge commit (a fast-forward won't apply once `master` carries release-merge history). Open a PR from `develop` to `master` and merge it, or locally:
 
    ```bash
    git checkout master && git pull
-   git merge --ff-only origin/develop
+   git merge origin/develop        # creates the release merge commit
    git push origin master
    ```
 

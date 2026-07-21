@@ -60,11 +60,11 @@ node scripts/package-plugin.mjs yourname.your-plugin # 构建并打包到 .out/
 发布以插件为单位，**只由推送 `<plugin-id>@<version>` tag 触发** —— 没有别的方式会发布。[发布工作流](.github/workflows/release.yml) 会在 tag、插件的 `manifest.json` 版本、以及 `index.json` 中的条目三者不一致时拒绝发布，因此注册表条目必须在打 tag **之前**合入。
 
 1. **把插件 PR 合入 `develop`。** 此时只跑 CI，不发布。
-2. **把 `master` 推进到 `develop`** —— `master` 只通过发布合并移动：
+2. **把 `develop` 合入 `master`** —— `master` 只通过发布合并前进，所以这是一个合并提交（一旦 `master` 带上发布合并历史，快进就不再适用）。可以从 `develop` 向 `master` 发起 PR 合并，或在本地：
 
    ```bash
    git checkout master && git pull
-   git merge --ff-only origin/develop
+   git merge origin/develop        # 生成发布合并提交
    git push origin master
    ```
 
