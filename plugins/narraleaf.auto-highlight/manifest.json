@@ -1,0 +1,18 @@
+{
+  "manifestVersion": 2,
+  "id": "narraleaf.auto-highlight",
+  "name": "Auto-Highlight",
+  "version": "0.1.0",
+  "description": "Highlights whoever is speaking and dims everyone else, automatically, at compile time. Adds Enable / Disable and manual highlight story actions.",
+  "publisher": "NarraLeaf",
+  "entries": {
+    "studio": "main.js",
+    "runtime": "runtime.js"
+  },
+  "contributes": {
+    "runtimeData": [
+      "config"
+    ]
+  },
+  "permissions": []
+}
