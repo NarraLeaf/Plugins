@@ -86,7 +86,7 @@
         "homepage": { "type": "string", "format": "uri" },
         "studioVersion": {
           "type": "string",
-          "description": "Advisory semver range. Studio does not enforce this yet."
+          "description": "Semver range of Studio versions this plugin runs on. Studio enforces it: the store withholds the install/update button outside the range, and the install handler refuses. Supported: *, exact versions, > >= < <= =, ^, ~, space-separated AND, || OR. A range Studio cannot parse is treated as *."
         },
         "contributes": {
           "type": "object",
