@@ -25,14 +25,75 @@ export const INDEX_FORMAT_VERSION = 1;
 export const PLUGIN_MANIFEST_VERSION = 2;
 export const PLUGIN_ENTRY_TARGETS = ["studio", "runtime"];
 /** Contribution kinds whose value is an array of `<pluginId>.`-prefixed type strings. */
-export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets"];
-/** Every recognized contributes key, including the object-shaped `locales`. */
-export const PLUGIN_CONTRIBUTES_KEYS = [...PLUGIN_CONTRIBUTES_TYPE_KEYS, "locales"];
+export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets", "runtimeData"];
+/** Every recognized contributes key, including the object-shaped ones. */
+export const PLUGIN_CONTRIBUTES_KEYS = [
+    ...PLUGIN_CONTRIBUTES_TYPE_KEYS,
+    "locales",
+    "runtimeCapabilities",
+    "sidecars",
+    "buildDependencies",
+];
+
+/**
+ * Capability domains a plugin's `runtime` entry may declare. Closed list: an
+ * unknown capability fails validation rather than being ignored, so a typo can
+ * never read as "asked for nothing".
+ */
+export const PLUGIN_RUNTIME_CAPABILITIES = [
+    "store",
+    "events",
+    "state.read",
+    "state.write",
+    "saves.read",
+    "saves.write",
+    "ui.overlay",
+    "assets",
+    "locale",
+];
+
+/**
+ * Permission kinds Studio *derives* from `contributes`. Writing one by hand is a
+ * second source of truth for the same capability, which is how an install prompt
+ * and a plugin's real reach drift apart — so it is rejected, not merged.
+ */
+export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency"];
+
+/** Desktop only: web has no process to spawn and the mobile shells are WebViews. */
+const BINARY_PLATFORMS = ["windows", "macos", "linux"];
+const BINARY_ARCHS = ["x64", "arm64", "universal"];
+
+const SIDECAR_DEFAULTS = {
+    kind: "executable",
+    transport: "stdio-jsonl",
+    autostart: "onGameStart",
+    startupTimeoutMs: 5000,
+    shutdownTimeoutMs: 3000,
+    restart: { maxRetries: 3, backoffMs: 1000 },
+};
+
+const SHA256_PATTERN = /^[a-f0-9]{64}$/i;
+/** `dep:<buildDependencyId>/<path>` — an include served by a build dependency. */
+const DEP_INCLUDE_PREFIX = "dep:";
 
 const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 /** BCP-47-ish locale code: primary subtag plus optional hyphen-joined subtags. */
 const LOCALE_CODE_PATTERN = /^[a-z]{2,3}(-[A-Za-z0-9]+)*$/;
+
+/** `<platform>-<arch>`, e.g. `windows-x64`. `universal` is macOS-only. */
+export function isPluginBinaryPlatformKey(value) {
+    const separator = typeof value === "string" ? value.lastIndexOf("-") : -1;
+    if (separator <= 0) {
+        return false;
+    }
+    const platform = value.slice(0, separator);
+    const arch = value.slice(separator + 1);
+    if (!BINARY_PLATFORMS.includes(platform) || !BINARY_ARCHS.includes(arch)) {
+        return false;
+    }
+    return arch !== "universal" || platform === "macos";
+}
 
 /**
  * Registry-level categories. Kept small on purpose: a long tail of one-off
@@ -136,6 +197,241 @@ export function isSafeRelativeEntry(entry) {
     }
     const segments = entry.split(/[\\/]+/).filter(Boolean);
     return segments.length > 0 && segments.every(segment => segment !== "." && segment !== "..");
+}
+
+/** Returns the number of declared capabilities; pushes any problems onto `errors`. */
+function validateRuntimeCapabilities(value, errors) {
+    if (value === undefined) {
+        return 0;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.runtimeCapabilities must be an array of capability strings");
+        return 0;
+    }
+    for (const item of value) {
+        const capability = typeof item === "string" ? item.trim() : "";
+        if (!capability) {
+            errors.push("contributes.runtimeCapabilities entries must be non-empty strings");
+            continue;
+        }
+        if (!PLUGIN_RUNTIME_CAPABILITIES.includes(capability)) {
+            errors.push(`unknown runtime capability: ${capability} (known: ${PLUGIN_RUNTIME_CAPABILITIES.join(", ")})`);
+        }
+    }
+    return value.length;
+}
+
+/** Returns the declared dependency ids, which sidecar `dep:` includes resolve against. */
+function validateBuildDependencies(value, pluginId, errors) {
+    if (value === undefined) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.buildDependencies must be an array of dependency objects");
+        return [];
+    }
+    const ids = [];
+    for (const item of value) {
+        if (!isRecord(item)) {
+            errors.push("contributes.buildDependencies entries must be objects");
+            continue;
+        }
+        const id = typeof item.id === "string" ? item.id.trim() : "";
+        if (!id || (pluginId && !id.startsWith(`${pluginId}.`))) {
+            errors.push(`build dependency id must be prefixed with the plugin id: ${String(item.id)}`);
+            continue;
+        }
+        if (ids.includes(id)) {
+            errors.push(`contributes.buildDependencies declares "${id}" more than once`);
+        }
+        ids.push(id);
+
+        if (!isRecord(item.targets) || Object.keys(item.targets).length === 0) {
+            errors.push(`build dependency "${id}" must declare at least one platform target`);
+            continue;
+        }
+        for (const [platformKey, target] of Object.entries(item.targets)) {
+            const where = `build dependency "${id}" target "${platformKey}"`;
+            if (!isPluginBinaryPlatformKey(platformKey)) {
+                errors.push(`${where} has an unsupported platform key (expected <windows|macos|linux>-<x64|arm64>, or macos-universal)`);
+                continue;
+            }
+            if (!isRecord(target)) {
+                errors.push(`${where} must be an object`);
+                continue;
+            }
+            const url = typeof target.url === "string" ? target.url.trim() : "";
+            let parsed = null;
+            try {
+                parsed = new URL(url);
+            } catch {
+                parsed = null;
+            }
+            if (!parsed) {
+                errors.push(`${where} url must be an absolute URL`);
+            } else if (parsed.protocol !== "https:") {
+                // The digest would catch swapped bytes, but the failure mode
+                // should be "cannot be attacked", not "attack detected late".
+                errors.push(`${where} url must use https`);
+            }
+            if (!SHA256_PATTERN.test(typeof target.sha256 === "string" ? target.sha256.trim() : "")) {
+                errors.push(`${where} must declare a valid sha256`);
+            }
+            const archive = target.archive ?? "zip";
+            if (archive === "none") {
+                const fileName = typeof target.fileName === "string" ? target.fileName.trim() : "";
+                if (!fileName || !isSafeRelativeEntry(fileName)) {
+                    errors.push(`${where} fileName must be a relative path inside the dependency directory`);
+                }
+                continue;
+            }
+            if (archive !== "zip") {
+                errors.push(`${where} archive must be "zip" or "none"`);
+                continue;
+            }
+            if (!isRecord(target.files) || Object.keys(target.files).length === 0) {
+                errors.push(`${where} must map at least one archive path in "files"`);
+                continue;
+            }
+            for (const [inner, out] of Object.entries(target.files)) {
+                const destination = typeof out === "string" ? out.trim() : "";
+                if (!inner.trim()) {
+                    errors.push(`${where} files keys must be non-empty archive paths`);
+                }
+                if (!destination || !isSafeRelativeEntry(destination)) {
+                    errors.push(`${where} files["${inner}"] must be a relative path inside the dependency directory`);
+                }
+            }
+        }
+    }
+    return ids;
+}
+
+/** Returns the number of declared sidecars; pushes any problems onto `errors`. */
+function validateSidecars(value, pluginId, dependencyIds, errors) {
+    if (value === undefined) {
+        return 0;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.sidecars must be an array of sidecar objects");
+        return 0;
+    }
+    const seen = new Set();
+    for (const item of value) {
+        if (!isRecord(item)) {
+            errors.push("contributes.sidecars entries must be objects");
+            continue;
+        }
+        const id = typeof item.id === "string" ? item.id.trim() : "";
+        if (!id || (pluginId && !id.startsWith(`${pluginId}.`))) {
+            errors.push(`sidecar id must be prefixed with the plugin id: ${String(item.id)}`);
+            continue;
+        }
+        if (seen.has(id)) {
+            errors.push(`contributes.sidecars declares "${id}" more than once`);
+        }
+        seen.add(id);
+
+        const kind = item.kind ?? SIDECAR_DEFAULTS.kind;
+        if (kind !== "executable" && kind !== "node") {
+            errors.push(`sidecar "${id}" kind must be "executable" or "node"`);
+        }
+        if ((item.transport ?? SIDECAR_DEFAULTS.transport) !== "stdio-jsonl") {
+            errors.push(`sidecar "${id}" transport must be "stdio-jsonl"`);
+        }
+        const autostart = item.autostart ?? SIDECAR_DEFAULTS.autostart;
+        if (autostart !== "onGameStart" && autostart !== "onRequest") {
+            errors.push(`sidecar "${id}" autostart must be "onGameStart" or "onRequest"`);
+        }
+        for (const key of ["startupTimeoutMs", "shutdownTimeoutMs"]) {
+            if (item[key] !== undefined && !(Number.isInteger(item[key]) && item[key] > 0)) {
+                errors.push(`sidecar "${id}" ${key} must be a positive integer`);
+            }
+        }
+        if (item.restart !== undefined) {
+            if (!isRecord(item.restart)) {
+                errors.push(`sidecar "${id}" restart must be an object`);
+            } else {
+                const { maxRetries, backoffMs } = item.restart;
+                if (maxRetries !== undefined && !(Number.isInteger(maxRetries) && maxRetries >= 0)) {
+                    errors.push(`sidecar "${id}" restart.maxRetries must be a non-negative integer`);
+                }
+                if (backoffMs !== undefined && !(Number.isInteger(backoffMs) && backoffMs > 0)) {
+                    errors.push(`sidecar "${id}" restart.backoffMs must be a positive integer`);
+                }
+            }
+        }
+
+        if (!isRecord(item.targets) || Object.keys(item.targets).length === 0) {
+            errors.push(`sidecar "${id}" must declare at least one platform target`);
+            continue;
+        }
+        for (const [platformKey, target] of Object.entries(item.targets)) {
+            const where = `sidecar "${id}" target "${platformKey}"`;
+            if (!isPluginBinaryPlatformKey(platformKey)) {
+                errors.push(`${where} has an unsupported platform key (expected <windows|macos|linux>-<x64|arm64>, or macos-universal)`);
+                continue;
+            }
+            if (!isRecord(target)) {
+                errors.push(`${where} must be an object`);
+                continue;
+            }
+            const entry = typeof target.entry === "string" ? target.entry.trim() : "";
+            if (!entry || !isSafeRelativeEntry(entry)) {
+                errors.push(`${where} entry must be a relative path inside the package`);
+            }
+            if (!Array.isArray(target.include) || target.include.length === 0) {
+                errors.push(`${where} must list the files it ships in "include"`);
+                continue;
+            }
+            const packaged = [];
+            for (const rawInclude of target.include) {
+                const include = typeof rawInclude === "string" ? rawInclude.trim() : "";
+                if (!include) {
+                    errors.push(`${where} include entries must be non-empty strings`);
+                    continue;
+                }
+                if (include.startsWith(DEP_INCLUDE_PREFIX)) {
+                    const reference = include.slice(DEP_INCLUDE_PREFIX.length);
+                    const separator = reference.indexOf("/");
+                    const dependencyId = separator === -1 ? reference : reference.slice(0, separator);
+                    const relative = separator === -1 ? "" : reference.slice(separator + 1);
+                    if (!dependencyIds.includes(dependencyId)) {
+                        errors.push(`${where} include references undeclared build dependency "${dependencyId}"`);
+                    }
+                    if (!relative || !isSafeRelativeEntry(relative)) {
+                        errors.push(`${where} include "${include}" must name a path inside the dependency`);
+                    }
+                    continue;
+                }
+                if (!isSafeRelativeEntry(include)) {
+                    errors.push(`${where} include "${include}" must be a relative path inside the package`);
+                    continue;
+                }
+                packaged.push(include);
+            }
+            if (entry && !target.include.includes(entry)) {
+                errors.push(`${where} entry "${entry}" must also appear in "include"`);
+            }
+            // Every package-relative include needs a digest. `dep:` entries are
+            // pinned by the build dependency's own sha256 instead.
+            if (!isRecord(target.sha256)) {
+                errors.push(`${where} must declare sha256 digests for its shipped files`);
+                continue;
+            }
+            for (const file of packaged) {
+                const digest = typeof target.sha256[file] === "string" ? target.sha256[file].trim() : "";
+                if (!SHA256_PATTERN.test(digest)) {
+                    errors.push(`${where} is missing a valid sha256 for "${file}"`);
+                }
+            }
+            const extra = Object.keys(target.sha256).filter(file => !packaged.includes(file));
+            if (extra.length) {
+                errors.push(`${where} declares sha256 for files it does not ship: ${extra.join(", ")}`);
+            }
+        }
+    }
+    return value.length;
 }
 
 /**
@@ -251,6 +547,23 @@ export function validatePluginManifest(value) {
                     }
                 }
             }
+
+            const capabilities = validateRuntimeCapabilities(value.contributes.runtimeCapabilities, errors);
+            // Build dependencies first: sidecar `dep:` includes resolve against them.
+            const dependencyIds = validateBuildDependencies(value.contributes.buildDependencies, id, errors);
+            const sidecars = validateSidecars(value.contributes.sidecars, id, dependencyIds, errors);
+
+            // Capabilities and sidecars are powers of the *runtime* entry.
+            // Declaring them without one asks the user to approve something
+            // nothing can use.
+            if (isRecord(entries) && typeof entries.runtime !== "string") {
+                if (capabilities > 0) {
+                    errors.push("contributes.runtimeCapabilities requires a runtime entry");
+                }
+                if (sidecars > 0) {
+                    errors.push("contributes.sidecars requires a runtime entry");
+                }
+            }
         }
     }
 
@@ -279,6 +592,10 @@ export function validatePluginManifest(value) {
                     if (!readString(permission, "capability")) {
                         errors.push("api permission requires a non-empty capability");
                     }
+                    continue;
+                }
+                if (PLUGIN_DERIVED_PERMISSION_KINDS.includes(String(permission.kind))) {
+                    errors.push(`permission kind "${String(permission.kind)}" is derived from contributes and must not be declared by hand`);
                     continue;
                 }
                 errors.push(`unsupported permission kind: ${JSON.stringify(permission.kind)}`);
