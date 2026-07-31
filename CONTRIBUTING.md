@@ -53,6 +53,17 @@ A pull request is mergeable when:
 - **Permissions are minimal.** Every entry in `permissions` needs a reason in
   the pull request description. Filesystem and API permissions get the most
   scrutiny — plugins are not sandboxed, so an approved permission is real trust.
+- **An icon, if you ship one, is square.** `manifest.json` may declare
+  `"icon": "icon.png"` — a package-relative path to the thumbnail Studio shows
+  beside your plugin in the Launcher list, installed and store alike. It must be
+  `.png`, `.webp`, `.jpg` or `.jpeg` (no SVG — it is a document that can carry
+  script; no GIF — an animating row is not yours to impose), square, between
+  64x64 and 512x512, and at most 512 KB. Your build script has to copy it into
+  `dist/` the way it copies `manifest.json`; the template's already does.
+  `scripts/validate.mjs` checks every rule, and Studio refuses to install a
+  package whose icon is missing or out of bounds. Plugins without one keep the
+  monogram tile Studio draws from the name — that is a fine place to stay, but
+  do replace the template's placeholder piece before publishing.
 - **Host modules stay external.** Never bundle `react`, `react-dom`, or
   `narraleaf-studio/*`. The host supplies them through an import map; bundling
   React produces a second, broken instance. The template's `build.mjs` already

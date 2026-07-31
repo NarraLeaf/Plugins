@@ -83,6 +83,11 @@
           "items": { "type": "string" }
         },
         "license": { "type": "string" },
+        "icon": {
+          "type": "string",
+          "format": "uri",
+          "description": "Thumbnail for the store list, pinned to the release tag so an entry's picture cannot change under it. Present only when the manifest declares an icon."
+        },
         "homepage": { "type": "string", "format": "uri" },
         "studioVersion": {
           "type": "string",
@@ -90,11 +95,16 @@
         },
         "contributes": {
           "type": "object",
-          "required": ["blueprintNodes", "widgets"],
+          "required": ["blueprintNodes", "widgets", "locales"],
           "additionalProperties": false,
           "properties": {
             "blueprintNodes": { "type": "array", "items": { "type": "string" } },
-            "widgets": { "type": "array", "items": { "type": "string" } }
+            "widgets": { "type": "array", "items": { "type": "string" } },
+            "locales": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Locale codes the plugin's language packs add or fill."
+            }
           }
         },
         "permissions": {

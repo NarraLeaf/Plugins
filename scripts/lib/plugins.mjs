@@ -12,6 +12,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+    pluginIconExtension,
+    pluginIconExtensionList,
+    validatePluginIconBytes,
+} from "./image.mjs";
 
 export const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 export const pluginsDir = path.join(repoRoot, "plugins");
@@ -19,6 +24,8 @@ export const templateDir = path.join(repoRoot, "template");
 export const indexPath = path.join(repoRoot, "index.json");
 
 export const REPOSITORY_URL = "https://github.com/NarraLeaf/Plugins";
+/** Where the same repository serves raw file bytes. Must stay in step with REPOSITORY_URL. */
+export const RAW_CONTENT_URL = "https://raw.githubusercontent.com/NarraLeaf/Plugins";
 export const INDEX_FORMAT_VERSION = 1;
 
 /** Studio only understands manifestVersion 2. v1 is hard-rejected at install. */
@@ -154,6 +161,21 @@ export function releaseDownloadUrl(id, version) {
 
 export function releasePageUrl(id, version) {
     return `${REPOSITORY_URL}/releases/tag/${encodeURIComponent(releaseTag(id, version))}`;
+}
+
+/**
+ * Where the store fetches a plugin's thumbnail: the icon file as it stood at
+ * the release tag.
+ *
+ * Pinned to the tag rather than to a branch for the same reason the download
+ * URL is — an index entry describes one immutable version, so the picture it
+ * carries should not change under it when the plugin's next version lands. Like
+ * the download URL this is deterministic from (id, version) and therefore
+ * reviewable in the PR that bumps the version, before the tag exists.
+ */
+export function iconUrl(id, version, icon) {
+    const relative = icon.split(/[\\/]+/).map(encodeURIComponent).join("/");
+    return `${RAW_CONTENT_URL}/${encodeURIComponent(releaseTag(id, version))}/plugins/${id}/${relative}`;
 }
 
 /** Split `<plugin-id>@<version>` back apart. Returns null when malformed. */
@@ -462,6 +484,18 @@ export function validatePluginManifest(value) {
         errors.push("version must be semver, for example 1.0.0");
     }
 
+    // Only the shape is decidable here — the icon is a file, and whether those
+    // bytes are a square image within the size limits is checked in loadPlugin,
+    // which has the directory. Both halves have to hold for Studio to install it.
+    if (value.icon !== undefined) {
+        const icon = typeof value.icon === "string" ? value.icon.trim() : "";
+        if (!icon || !isSafeRelativeEntry(icon)) {
+            errors.push("icon must be a relative image path inside the plugin package");
+        } else if (!pluginIconExtension(icon)) {
+            errors.push(`icon must be one of: ${pluginIconExtensionList()}`);
+        }
+    }
+
     const entries = value.entries;
     if (!isRecord(entries)) {
         errors.push("entries must be an object declaring at least one of: studio, runtime");
@@ -676,6 +710,21 @@ export function loadPlugin(dirName, { root = pluginsDir } = {}) {
         }
     }
 
+    // The icon travels with the package, so it is checked here rather than left
+    // for Studio to reject at install time — the same rules, one step earlier.
+    if (result.ok && typeof manifest.icon === "string" && manifest.icon.trim()) {
+        const icon = manifest.icon.trim();
+        const iconPath = path.join(dir, ...icon.split(/[\\/]+/));
+        if (!fs.existsSync(iconPath) || !fs.statSync(iconPath).isFile()) {
+            errors.push(`icon file not found: ${icon}`);
+        } else {
+            const problem = validatePluginIconBytes(fs.readFileSync(iconPath), icon);
+            if (problem) {
+                errors.push(problem);
+            }
+        }
+    }
+
     // A committed lockfile is what makes a plugin reproducible for other
     // contributors and for the release runner.
     if (!fs.existsSync(path.join(dir, "yarn.lock"))) {
@@ -716,6 +765,9 @@ export function toIndexEntry(plugin) {
         },
     };
 
+    if (manifest.icon) {
+        entry.icon = iconUrl(manifest.id, manifest.version, manifest.icon.trim());
+    }
     if (meta.studioVersion) {
         entry.studioVersion = meta.studioVersion;
     }
