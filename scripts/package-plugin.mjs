@@ -87,6 +87,15 @@ for (const target of ["studio", "runtime"]) {
         missing.push(`${entry} (declared as entries.${target})`);
     }
 }
+// The build script has to copy the icon the way it copies manifest.json.
+// Studio refuses a package whose declared icon is absent, so catching it here
+// turns a failed install into a failed build.
+if (typeof manifest.icon === "string" && manifest.icon.trim()) {
+    const icon = manifest.icon.trim();
+    if (!fs.existsSync(path.join(distDir, ...icon.split(/[\\/]+/)))) {
+        missing.push(`${icon} (declared as icon — copy it into dist/ from your build script)`);
+    }
+}
 if (missing.length) {
     console.error(`plugins/${pluginId}/dist is missing declared file(s):`);
     for (const item of missing) {

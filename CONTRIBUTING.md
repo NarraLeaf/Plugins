@@ -53,6 +53,17 @@ A pull request is mergeable when:
 - **Permissions are minimal.** Every entry in `permissions` needs a reason in
   the pull request description. Filesystem and API permissions get the most
   scrutiny — plugins are not sandboxed, so an approved permission is real trust.
+- **An icon, if you ship one, is square.** `manifest.json` may declare
+  `"icon": "icon.png"` — a package-relative path to the thumbnail Studio shows
+  beside your plugin in the Launcher list, installed and store alike. It must be
+  `.png`, `.webp`, `.jpg` or `.jpeg` (no SVG — it is a document that can carry
+  script; no GIF — an animating row is not yours to impose), square, between
+  64x64 and 512x512, and at most 512 KB. Your build script has to copy it into
+  `dist/` the way it copies `manifest.json`; the template's already does.
+  `scripts/validate.mjs` checks every rule, and Studio refuses to install a
+  package whose icon is missing or out of bounds. Declaring one is optional:
+  a plugin without an icon gets the monogram tile Studio draws from its name,
+  which is a perfectly good place to stay.
 - **Host modules stay external.** Never bundle `react`, `react-dom`, or
   `narraleaf-studio/*`. The host supplies them through an import map; bundling
   React produces a second, broken instance. The template's `build.mjs` already
@@ -83,6 +94,13 @@ if the tag, `manifest.json`, and `index.json` disagree. See
 ## Keeping the validator honest
 
 `scripts/lib/plugins.mjs` contains a port of Studio's manifest validator
-(`src/shared/utils/pluginManifest.ts`). If Studio's validation rules change,
-update the port in the same change — otherwise CI accepts manifests that Studio
-rejects at install, which is the worst possible failure mode for a registry.
+(`src/shared/utils/pluginManifest.ts`), and `scripts/lib/image.mjs` a port of its
+icon rules (`src/shared/constants/pluginIcon.ts` plus
+`src/shared/utils/{pluginIcon,imageDimensions}.ts`). If Studio's validation rules
+change, update the ports in the same change — otherwise CI accepts manifests that
+Studio rejects at install, which is the worst possible failure mode for a
+registry.
+
+Run the tooling's own tests with `node --test scripts/lib/*.test.mjs`. They carry
+the icon rules in particular, because no plugin here ships an icon and the code
+would otherwise never execute until a contributor's did.

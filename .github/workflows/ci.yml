@@ -18,6 +18,11 @@ jobs:
         with:
           node-version: 22
 
+      # Nothing in the repository ships an icon, so without this the icon rules
+      # would only ever run against a contributor's plugin.
+      - name: Test the registry tooling
+        run: node --test scripts/lib/*.test.mjs
+
       # Runs the same manifest validator Studio uses at install time, so a
       # plugin that passes CI is one Studio will accept.
       - name: Validate manifests
