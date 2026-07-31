@@ -40,6 +40,60 @@
         "download": "https://github.com/NarraLeaf/Plugins/releases/download/helloyork.nekolang-i18n%401.1.0/helloyork.nekolang-i18n-1.1.0.zip"
       },
       "studioVersion": ">=0.0.1"
+    },
+    {
+      "id": "narraleaf.steam-achievements",
+      "name": "Steam Achievements",
+      "version": "0.1.0",
+      "description": "Author Steam achievements and stats in Studio, and unlock them from blueprint graphs. Falls back to a local mirror wherever Steam is not available, so the same script works on itch, on the web export and in Dev Mode.",
+      "publisher": "NarraLeaf Studio",
+      "path": "plugins/narraleaf.steam-achievements",
+      "targets": [
+        "studio",
+        "runtime"
+      ],
+      "categories": [
+        "integration",
+        "blueprint"
+      ],
+      "keywords": [
+        "narraleaf",
+        "narraleaf-studio-plugin",
+        "steam",
+        "steamworks",
+        "achievements",
+        "stats",
+        "sidecar"
+      ],
+      "license": "MPL-2.0",
+      "contributes": {
+        "blueprintNodes": [
+          "narraleaf.steam-achievements.unlock",
+          "narraleaf.steam-achievements.isUnlocked",
+          "narraleaf.steam-achievements.indicateProgress",
+          "narraleaf.steam-achievements.setStat",
+          "narraleaf.steam-achievements.addStat",
+          "narraleaf.steam-achievements.getStat",
+          "narraleaf.steam-achievements.available",
+          "narraleaf.steam-achievements.language",
+          "narraleaf.steam-achievements.resetAll"
+        ],
+        "widgets": [],
+        "locales": []
+      },
+      "permissions": [],
+      "release": {
+        "tag": "narraleaf.steam-achievements@0.1.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.steam-achievements%400.1.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.steam-achievements%400.1.0/narraleaf.steam-achievements-0.1.0.zip"
+      },
+      "studioVersion": ">=0.2.0",
+      "locales": {
+        "zh-CN": {
+          "name": "Steam 成就",
+          "description": "在 Studio 里编写 Steam 成就与统计量，并用蓝图节点解锁。Steam 不可用时写入本地镜像，itch 版、web 版与 Dev Mode 下同一套脚本照常工作。"
+        }
+      }
     }
   ]
 }

@@ -5,7 +5,6 @@
   "version": "0.1.0",
   "description": "Template plugin: one blueprint node registered on both the studio and runtime targets.",
   "publisher": "Example",
-  "icon": "icon.png",
   "entries": {
     "studio": "main.js",
     "runtime": "runtime.js"

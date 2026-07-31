@@ -70,8 +70,9 @@ for (const target of ["studio", "runtime"]) {
 fs.copyFileSync(path.join(root, "manifest.json"), path.join(distDir, "manifest.json"));
 console.log("copied manifest.json");
 
-// Same for the icon: Studio refuses a package whose declared icon is missing,
-// so anything the manifest points at has to end up in dist/.
+// Same for a declared icon (the starter has none — add `"icon": "icon.png"` to
+// manifest.json and drop the file next to it). Studio refuses a package whose
+// declared icon is missing, so anything the manifest points at ships too.
 if (typeof manifest.icon === "string" && manifest.icon.trim()) {
     const relative = manifest.icon.trim().split(/[\\/]+/);
     const target = path.join(distDir, ...relative);

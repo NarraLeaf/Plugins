@@ -61,9 +61,9 @@ A pull request is mergeable when:
   64x64 and 512x512, and at most 512 KB. Your build script has to copy it into
   `dist/` the way it copies `manifest.json`; the template's already does.
   `scripts/validate.mjs` checks every rule, and Studio refuses to install a
-  package whose icon is missing or out of bounds. Plugins without one keep the
-  monogram tile Studio draws from the name — that is a fine place to stay, but
-  do replace the template's placeholder piece before publishing.
+  package whose icon is missing or out of bounds. Declaring one is optional:
+  a plugin without an icon gets the monogram tile Studio draws from its name,
+  which is a perfectly good place to stay.
 - **Host modules stay external.** Never bundle `react`, `react-dom`, or
   `narraleaf-studio/*`. The host supplies them through an import map; bundling
   React produces a second, broken instance. The template's `build.mjs` already
@@ -94,6 +94,13 @@ if the tag, `manifest.json`, and `index.json` disagree. See
 ## Keeping the validator honest
 
 `scripts/lib/plugins.mjs` contains a port of Studio's manifest validator
-(`src/shared/utils/pluginManifest.ts`). If Studio's validation rules change,
-update the port in the same change — otherwise CI accepts manifests that Studio
-rejects at install, which is the worst possible failure mode for a registry.
+(`src/shared/utils/pluginManifest.ts`), and `scripts/lib/image.mjs` a port of its
+icon rules (`src/shared/constants/pluginIcon.ts` plus
+`src/shared/utils/{pluginIcon,imageDimensions}.ts`). If Studio's validation rules
+change, update the ports in the same change — otherwise CI accepts manifests that
+Studio rejects at install, which is the worst possible failure mode for a
+registry.
+
+Run the tooling's own tests with `node --test scripts/lib/*.test.mjs`. They carry
+the icon rules in particular, because no plugin here ships an icon and the code
+would otherwise never execute until a contributor's did.
