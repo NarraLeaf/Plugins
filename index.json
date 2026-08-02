@@ -87,6 +87,7 @@
         "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.steam-achievements%400.1.0",
         "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.steam-achievements%400.1.0/narraleaf.steam-achievements-0.1.0.zip"
       },
+      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/narraleaf.steam-achievements%400.1.0/plugins/narraleaf.steam-achievements/icon.png",
       "studioVersion": ">=0.2.0",
       "locales": {
         "zh-CN": {

@@ -12,15 +12,19 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Publish ${{ github.ref_name }}
+  prepare:
+    name: Check ${{ github.ref_name }}
     runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.tag.outputs.id }}
+      version: ${{ steps.tag.outputs.version }}
+      asset: ${{ steps.tag.outputs.asset }}
+      has-sidecar: ${{ steps.sidecar.outputs.has-sidecar }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: corepack enable
 
       - name: Parse tag
         id: tag
@@ -41,7 +45,8 @@ jobs:
           TAG: ${{ github.ref_name }}
 
       # The tag must agree with what is committed, otherwise the published
-      # artifact would not match the source anyone can read at that tag.
+      # artifact would not match the source anyone can read at that tag. Checked
+      # before anything is built, so a bad tag costs one runner and not four.
       - name: Verify tag matches committed version
         run: |
           node -e "
@@ -77,28 +82,130 @@ jobs:
       - name: Validate
         run: node scripts/validate.mjs ${{ steps.tag.outputs.id }}
 
+      # A plugin ships a native sidecar if it has a builder for one. Plugins
+      # without it skip the whole matrix below rather than spinning up three
+      # runners to do nothing.
+      - name: Detect sidecar
+        id: sidecar
+        run: |
+          if [ -f "plugins/${{ steps.tag.outputs.id }}/sidecar/build.mjs" ]; then
+            echo "has-sidecar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-sidecar=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # One runner per platform, because a native binary can only honestly be built
+  # on the platform it targets: cross-building loses the executable bit and, on
+  # macOS, the second architecture.
+  sidecar:
+    name: Sidecar ${{ matrix.platform-key }}
+    needs: prepare
+    if: needs.prepare.outputs.has-sidecar == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            platform-key: windows-x64
+          - os: macos-latest
+            platform-key: macos-universal
+            # macos-latest is Apple silicon; the Intel slice needs adding before
+            # sidecar/build.mjs can lipo the two together.
+            extra-targets: x86_64-apple-darwin
+          - os: ubuntu-latest
+            platform-key: linux-x64
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update && rustup default stable
+
+      - name: Add extra targets
+        if: matrix.extra-targets != ''
+        run: rustup target add ${{ matrix.extra-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/${{ needs.prepare.outputs.id }}/sidecar
+
+      # Invoked directly rather than through `yarn build:sidecar`: this needs
+      # cargo and Node, not the plugin's JavaScript dependencies, and installing
+      # them on three runners buys nothing.
+      - name: Build
+        working-directory: plugins/${{ needs.prepare.outputs.id }}
+        run: node sidecar/build.mjs
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: sidecar-${{ matrix.platform-key }}
+          path: plugins/${{ needs.prepare.outputs.id }}/bin
+          if-no-files-found: error
+
+  release:
+    name: Publish ${{ github.ref_name }}
+    needs: [prepare, sidecar]
+    # `always()` so a plugin with no sidecar (matrix skipped) still publishes,
+    # while a matrix that actually failed still stops the release.
+    if: always() && needs.prepare.result == 'success' && (needs.sidecar.result == 'success' || needs.sidecar.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: corepack enable
+
+      # Every platform's binaries land back under bin/, where the plugin's
+      # build.mjs looks for them. Packaging on Linux is safe even for the macOS
+      # image: no zip writer records POSIX modes, so Studio repairs the
+      # executable bit when it spawns a sidecar (sidecarHost.ensureExecutable).
+      - name: Collect sidecar binaries
+        if: needs.prepare.outputs.has-sidecar == 'true'
+        uses: actions/download-artifact@v5
+        with:
+          pattern: sidecar-*
+          merge-multiple: true
+          path: plugins/${{ needs.prepare.outputs.id }}/bin
+
+      - name: Show what will ship
+        if: needs.prepare.outputs.has-sidecar == 'true'
+        run: find plugins/${{ needs.prepare.outputs.id }}/bin -type f -exec sha256sum {} +
+
       - name: Install (immutable)
-        working-directory: plugins/${{ steps.tag.outputs.id }}
+        working-directory: plugins/${{ needs.prepare.outputs.id }}
         run: yarn install --immutable
 
       - name: Typecheck
-        working-directory: plugins/${{ steps.tag.outputs.id }}
+        working-directory: plugins/${{ needs.prepare.outputs.id }}
         run: yarn typecheck
 
+      - name: Test
+        working-directory: plugins/${{ needs.prepare.outputs.id }}
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
+            yarn test
+          else
+            echo "no test script; skipping"
+          fi
+
       - name: Build and package
-        run: node scripts/package-plugin.mjs ${{ steps.tag.outputs.id }}
+        run: node scripts/package-plugin.mjs ${{ needs.prepare.outputs.id }}
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.tag.outputs.id }} ${{ steps.tag.outputs.version }}
-          files: .out/${{ steps.tag.outputs.asset }}
+          name: ${{ needs.prepare.outputs.id }} ${{ needs.prepare.outputs.version }}
+          files: .out/${{ needs.prepare.outputs.asset }}
           fail_on_unmatched_files: true
           body: |
-            **${{ steps.tag.outputs.id }}** v${{ steps.tag.outputs.version }}
+            **${{ needs.prepare.outputs.id }}** v${{ needs.prepare.outputs.version }}
 
-            Download `${{ steps.tag.outputs.asset }}`, unzip it, then in NarraLeaf Studio open
+            Download `${{ needs.prepare.outputs.asset }}`, unzip it, then in NarraLeaf Studio open
             **Launcher → Plugins → Install from folder** and select the unzipped
-            `${{ steps.tag.outputs.id }}` folder.
+            `${{ needs.prepare.outputs.id }}` folder.
 
-            Source: [`plugins/${{ steps.tag.outputs.id }}`](https://github.com/NarraLeaf/Plugins/tree/${{ github.ref_name }}/plugins/${{ steps.tag.outputs.id }})
+            Source: [`plugins/${{ needs.prepare.outputs.id }}`](https://github.com/NarraLeaf/Plugins/tree/${{ github.ref_name }}/plugins/${{ needs.prepare.outputs.id }})

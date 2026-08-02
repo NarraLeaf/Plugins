@@ -4,11 +4,9 @@
 //! this API around — is a diff in one file rather than a hunt through the
 //! protocol loop.
 //!
-//! !!! THIS FILE HAS NEVER BEEN COMPILED. !!!
-//! It was written without a Rust toolchain and without the Steamworks SDK (which
-//! needs a Valve partner account to download). The protocol loop in main.rs is
-//! ordinary Rust; the calls below are the part to check first against the pinned
-//! crate version. See sidecar/README.md "Verification status" for the list.
+//! Building this needs no Valve partner account: `steamworks-sys` vendors the
+//! SDK under `lib/steam/` and its build script falls back to that copy whenever
+//! `STEAM_SDK_LOCATION` is unset.
 
 use std::ffi::CString;
 use std::path::Path;
@@ -58,11 +56,11 @@ impl Bridge {
                 return None;
             }
         };
-        // Asks Steam for this user's current achievement and stat values. The
-        // reply arrives on a callback, which the main loop is already pumping;
-        // reads before it lands return defaults, which is the same answer the
-        // local mirror would give.
-        client.user_stats().request_current_stats();
+        // No `RequestCurrentStats` call: Valve deprecated it in SDK 1.59, which
+        // fetches the current user's stats during init instead, and the crate
+        // dropped the binding to match. Reads that beat the fetch home would
+        // return defaults anyway — the same answer the local mirror gives, which
+        // is why no node reads Steam in the first place.
         Some(Bridge { client, dirty: false })
     }
 
