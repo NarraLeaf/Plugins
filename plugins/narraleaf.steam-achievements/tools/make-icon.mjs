@@ -1,11 +1,31 @@
 /**
- * Render the Steam Achievements plugin thumbnail: a gold trophy on Steam's
- * navy, 256x256 PNG. Drawn analytically and supersampled 4x, then encoded by
- * hand — a store thumbnail is not worth pulling an image library into a plugin
- * that otherwise builds with esbuild alone.
+ * Render the Steam Achievements plugin thumbnail: a line-art trophy, one ink
+ * colour on one ground. 256x256 PNG, encoded by hand — a store thumbnail is not
+ * worth pulling an image library into a plugin that otherwise builds with
+ * esbuild alone.
  *
- * Committed so the icon is reproducible rather than a binary someone once made:
- *   node tools/make-icon.mjs icon.png
+ *   node tools/make-icon.mjs icon.png [--size=64]
+ *
+ * **No Steam logo, and no derivative of one.** Valve's branding guidelines are
+ * explicit on both counts: their marks "may not be displayed as primary or
+ * prominent features on any non-Valve materials", the logo "must stand alone
+ * and may not be combined with any object", and only Valve's own artwork may be
+ * used — so a silhouette or knocked-out variant is further out of bounds than
+ * the logo itself, not a safer middle ground. A plugin icon is the most
+ * prominent brand slot there is, and this package is published by NarraLeaf.
+ * The plugin's *name* says Steam, which is ordinary descriptive use of the
+ * thing it integrates with, and that is where the association belongs.
+ *
+ * The drawing is a trophy, matching the lucide `Trophy` this plugin already
+ * puts on Studio's left rail, so the store thumbnail and the in-app icon are
+ * the same idea.
+ *
+ * The drawing is defined as strokes — segments and arcs — not as a silhouette
+ * to be outlined. Deriving an outline from a solid shape sounds equivalent and
+ * is not: every interior hole then has to be wider than the stroke or it fills
+ * in, which is exactly what happened to the handles on the first attempt. Ink
+ * is the band within half a stroke of the nearest primitive, so the weight is
+ * uniform by construction and antialiasing is just the distance ramp.
  *
  * The output has to stay square, 64-512px, and under 512 KB — Studio refuses
  * the package otherwise (see scripts/lib/image.mjs in the registry root).
@@ -13,91 +33,114 @@
 import fs from "node:fs";
 import zlib from "node:zlib";
 
-const SIZE = 256;
-const SS = 4; // supersampling factor per axis
+// 256 is what ships. `--size=64` renders it at the size a store row actually
+// shows, which is the only size worth judging line art at.
+const sizeArg = process.argv.find(arg => arg.startsWith("--size="));
+const SIZE = sizeArg ? Number.parseInt(sizeArg.slice("--size=".length), 10) : 256;
+if (!Number.isInteger(SIZE) || SIZE < 64 || SIZE > 512) {
+    console.error(`--size must be an integer in 64..512 (got ${SIZE})`);
+    process.exit(1);
+}
+
+/** Mask resolution per output pixel, per axis. Also the antialiasing budget. */
+const SS = 3;
+const N = SIZE * SS;
+
+/**
+ * Stroke weight as a fraction of the icon's width, so it scales with --size.
+ * Overridable to compare weights side by side; the default is the one that
+ * ships. Below about 0.03 the line starts washing out at 64px, which is the
+ * size that decides it.
+ */
+const strokeArg = process.argv.find(arg => arg.startsWith("--stroke="));
+const STROKE = strokeArg ? Number.parseFloat(strokeArg.slice("--stroke=".length)) : 0.040;
+if (!Number.isFinite(STROKE) || STROKE <= 0 || STROKE > 0.2) {
+    console.error(`--stroke must be a fraction in (0, 0.2] (got ${STROKE})`);
+    process.exit(1);
+}
 
 /* ------------------------------------------------------------------ palette */
-const BG_TOP = [32, 45, 66];
-const BG_BOTTOM = [17, 24, 36];
-const GOLD_LIGHT = [247, 201, 90];
-const GOLD_DARK = [199, 138, 26];
-const RIBBON = [92, 126, 168];
+// Two tones, no gradients: ink on ground.
+const GROUND = [24, 27, 33];
+const INK = [232, 236, 242];
 
-/* -------------------------------------------------------------------- shapes */
+/* ------------------------------------------------------------------ drawing */
+// Normalized coords: x in [-0.5, 0.5], y in [0, 1] top-down.
 
-/** Normalized coords: x in [-0.5, 0.5], y in [0, 1] top-down. */
-function inCup(x, y) {
-    if (y < 0.255 || y > 0.545) return false;
-    const ax = Math.abs(x);
-    // Rim slab.
-    if (y <= 0.30) return ax <= 0.215;
-    // Bowl: tapers, with the sides bowing inward slightly.
-    const t = (y - 0.30) / (0.545 - 0.30);
-    const half = 0.205 - 0.145 * t - 0.022 * Math.sin(Math.PI * t);
-    if (ax > half) return false;
-    // Round off the underside of the bowl.
-    if (t > 0.82) {
-        const k = (t - 0.82) / 0.18;
-        return ax <= half * Math.sqrt(Math.max(0, 1 - k * k));
-    }
-    return true;
+const RIM = 0.245;          // rim line
+const CUP_HALF = 0.170;     // half-width of the cup
+const BOWL_START = 0.395;   // where the straight sides give way to the bowl
+const BOWL_BOTTOM = BOWL_START + CUP_HALF;
+const BASE = 0.795;
+
+/** Distance from a point to a line segment. */
+function distSegment(x, y, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, ((x - x1) * dx + (y - y1) * dy) / len2));
+    return Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy));
 }
 
-function inHandle(x, y) {
-    const ax = Math.abs(x);
-    const cx = 0.208;
-    const cy = 0.345;
-    const dx = ax - cx;
-    const dy = y - cy;
-    const r = Math.hypot(dx, dy * 1.15);
-    // Outer half of a ring only, so it reads as a handle and not a circle.
-    return r >= 0.072 && r <= 0.106 && dx > -0.03;
-}
-
-function inStem(x, y) {
-    if (y < 0.545 || y > 0.665) return false;
-    const t = (y - 0.545) / 0.12;
-    return Math.abs(x) <= 0.035 + 0.022 * t * t;
-}
-
-function inBase(x, y) {
-    const ax = Math.abs(x);
-    if (y >= 0.665 && y <= 0.725) {
-        const t = (y - 0.665) / 0.06;
-        return ax <= 0.070 + 0.075 * t;
-    }
-    // Plinth.
-    if (y > 0.725 && y <= 0.775) return ax <= 0.175;
-    return false;
-}
-
-function inTrophy(x, y) {
-    return inCup(x, y) || inHandle(x, y) || inStem(x, y) || inBase(x, y);
-}
-
-/** A small star struck on the cup — the "achievement" half of the idea. */
-function inStar(x, y) {
-    const cx = 0;
-    const cy = 0.375;
+/**
+ * Distance to a circular arc. Angles in radians, measured with y growing down,
+ * and the arc runs counter-clockwise on screen from `a0` to `a1`. Points off
+ * the ends fall back to the nearer endpoint, so an arc caps like a segment.
+ */
+function distArc(x, y, cx, cy, r, a0, a1) {
     const dx = x - cx;
-    const dy = (y - cy) * 1.0;
-    const r = Math.hypot(dx, dy);
-    if (r > 0.085) return false;
-    let angle = Math.atan2(dy, dx) + Math.PI / 2;
-    const spoke = Math.PI * 2 / 5;
-    angle = ((angle % spoke) + spoke) % spoke;
-    const half = spoke / 2;
-    const edge = 0.084 * 0.382 / Math.cos(Math.min(angle, spoke - angle) - half + half);
-    // Classic 5-point star: radius oscillates between outer and inner.
-    const k = Math.abs(angle - half) / half;
-    const radius = 0.034 + (0.085 - 0.034) * k * k;
-    void edge;
-    return r <= radius;
+    const dy = y - cy;
+    let angle = Math.atan2(dy, dx);
+    const TAU = Math.PI * 2;
+    const norm = value => ((value % TAU) + TAU) % TAU;
+    const span = norm(a1 - a0);
+    if (norm(angle - a0) <= span) {
+        return Math.abs(Math.hypot(dx, dy) - r);
+    }
+    return Math.min(
+        Math.hypot(x - (cx + r * Math.cos(a0)), y - (cy + r * Math.sin(a0))),
+        Math.hypot(x - (cx + r * Math.cos(a1)), y - (cy + r * Math.sin(a1))),
+    );
 }
 
-/** Rounded-square mask so the thumbnail has a shape of its own in a list. */
+/**
+ * Distance to the trophy: rim, two straight cup walls, the U of the bowl, a
+ * handle on each side, the stem, and a base bar with a short flare into it.
+ *
+ * The handles are half-rings standing off the cup wall, and the gap between
+ * ring and wall is set to about two stroke widths — any tighter and the two
+ * lines merge into a blob at 64px, which is the size that decides this.
+ */
+function distTrophy(x, y) {
+    const ax = Math.abs(x);
+    const HANDLE_CX = CUP_HALF + 0.062;
+    const HANDLE_CY = 0.320;
+    const HANDLE_R = 0.070;
+
+    return Math.min(
+        // Rim, cup walls, and the bowl's U.
+        distSegment(ax, y, 0, RIM, CUP_HALF, RIM),
+        distSegment(ax, y, CUP_HALF, RIM, CUP_HALF, BOWL_START),
+        distArc(x, y, 0, BOWL_START, CUP_HALF, 0, Math.PI),
+        // Handle: the ring's *outer* half (up -> right -> down, with y growing
+        // down), plus two stubs joining it to the wall so it reads as attached
+        // rather than floating. Taking the other half bulges it into the cup,
+        // where it overlaps the wall and reads as a bracket.
+        distArc(ax, y, HANDLE_CX, HANDLE_CY, HANDLE_R, Math.PI * 1.5, Math.PI / 2),
+        distSegment(ax, y, CUP_HALF, HANDLE_CY - HANDLE_R, HANDLE_CX, HANDLE_CY - HANDLE_R),
+        distSegment(ax, y, CUP_HALF, HANDLE_CY + HANDLE_R, HANDLE_CX, HANDLE_CY + HANDLE_R),
+        // Stem, flared foot, base bar. The flare starts off a short flat rather
+        // than a point, so it does not read as a letter A.
+        distSegment(x, y, 0, BOWL_BOTTOM, 0, 0.688),
+        distSegment(ax, y, 0.034, 0.688, 0.100, BASE),
+        distSegment(ax, y, 0, 0.688, 0.034, 0.688),
+        distSegment(ax, y, 0, BASE, 0.178, BASE),
+    );
+}
+
+/** Rounded-square ground, so the thumbnail has a shape of its own in a list. */
 function inCard(px, py) {
-    const radius = 0.16;
+    const radius = 0.17;
     const x = Math.min(px, 1 - px);
     const y = Math.min(py, 1 - py);
     if (x >= radius || y >= radius) return true;
@@ -106,63 +149,60 @@ function inCard(px, py) {
     return dx * dx + dy * dy <= radius * radius;
 }
 
-function mix(a, b, t) {
-    return [
-        Math.round(a[0] + (b[0] - a[0]) * t),
-        Math.round(a[1] + (b[1] - a[1]) * t),
-        Math.round(a[2] + (b[2] - a[2]) * t),
-    ];
+/* -------------------------------------------------------------------- ink */
+
+const halfStroke = STROKE / 2;
+/** Feather over roughly one output pixel, so the line is crisp but not jagged. */
+const feather = 0.6 / SIZE;
+
+const coverage = new Float64Array(N * N);
+for (let gy = 0; gy < N; gy += 1) {
+    for (let gx = 0; gx < N; gx += 1) {
+        const x = (gx + 0.5) / N - 0.5;
+        const y = (gy + 0.5) / N;
+        const d = distTrophy(x, y);
+        coverage[gy * N + gx] = Math.min(1, Math.max(0, (halfStroke - d) / feather + 0.5));
+    }
 }
 
 /* -------------------------------------------------------------------- render */
 
+function mix(a, b, t) {
+    const k = Math.min(1, Math.max(0, t));
+    return [
+        Math.round(a[0] + (b[0] - a[0]) * k),
+        Math.round(a[1] + (b[1] - a[1]) * k),
+        Math.round(a[2] + (b[2] - a[2]) * k),
+    ];
+}
+
 const rgba = Buffer.alloc(SIZE * SIZE * 4);
 for (let py = 0; py < SIZE; py += 1) {
     for (let px = 0; px < SIZE; px += 1) {
-        let r = 0, g = 0, b = 0, a = 0;
+        let ink = 0;
+        let card = 0;
         for (let sy = 0; sy < SS; sy += 1) {
             for (let sx = 0; sx < SS; sx += 1) {
-                const u = (px + (sx + 0.5) / SS) / SIZE;
-                const v = (py + (sy + 0.5) / SS) / SIZE;
+                const gx = px * SS + sx;
+                const gy = py * SS + sy;
+                const u = (gx + 0.5) / N;
+                const v = (gy + 0.5) / N;
                 if (!inCard(u, v)) continue;
-                const x = u - 0.5;
-                const y = v;
-
-                let colour = mix(BG_TOP, BG_BOTTOM, v);
-                // A faint ribbon behind the trophy, for depth.
-                if (Math.abs(y - 0.80) < 0.045 && Math.abs(x) < 0.34) {
-                    colour = mix(colour, RIBBON, 0.35);
-                }
-                if (inTrophy(x, y)) {
-                    const shade = Math.min(1, Math.max(0, (y - 0.24) / 0.5));
-                    colour = mix(GOLD_LIGHT, GOLD_DARK, shade);
-                    // Specular hint on the left of the bowl. Falls off in both
-                    // axes — a hard-edged band reads as a drawing mistake at
-                    // thumbnail size, which is the only size this is ever seen.
-                    if (inCup(x, y)) {
-                        const fx = 1 - Math.min(1, Math.abs(x + 0.105) / 0.055);
-                        const fy = 1 - Math.min(1, Math.abs(y - 0.355) / 0.085);
-                        const glare = Math.max(0, fx) * Math.max(0, fy);
-                        if (glare > 0) {
-                            colour = mix(colour, [255, 243, 210], 0.5 * glare * glare);
-                        }
-                    }
-                    if (inStar(x, y)) {
-                        colour = mix(BG_BOTTOM, [10, 14, 22], 0.5);
-                    }
-                }
-                r += colour[0]; g += colour[1]; b += colour[2]; a += 255;
+                card += 1;
+                ink += coverage[gy * N + gx];
             }
         }
         const samples = SS * SS;
         const i = (py * SIZE + px) * 4;
-        // Premultiplied average would darken the edge against the card mask, so
-        // colour is averaged over covered samples only.
-        const covered = a / 255;
-        rgba[i] = covered ? Math.round(r / covered) : 0;
-        rgba[i + 1] = covered ? Math.round(g / covered) : 0;
-        rgba[i + 2] = covered ? Math.round(b / covered) : 0;
-        rgba[i + 3] = Math.round(a / samples);
+        if (card === 0) {
+            rgba[i] = rgba[i + 1] = rgba[i + 2] = rgba[i + 3] = 0;
+            continue;
+        }
+        const colour = mix(GROUND, INK, ink / card);
+        rgba[i] = colour[0];
+        rgba[i + 1] = colour[1];
+        rgba[i + 2] = colour[2];
+        rgba[i + 3] = Math.round((card / samples) * 255);
     }
 }
 
@@ -196,14 +236,12 @@ function chunk(type, data) {
 const ihdr = Buffer.alloc(13);
 ihdr.writeUInt32BE(SIZE, 0);
 ihdr.writeUInt32BE(SIZE, 4);
-ihdr[8] = 8;      // bit depth
-ihdr[9] = 6;      // colour type: RGBA
-ihdr[10] = 0;     // deflate
-ihdr[11] = 0;     // adaptive filtering
-ihdr[12] = 0;     // no interlace
+ihdr[8] = 8;  // bit depth
+ihdr[9] = 6;  // colour type: RGBA
+ihdr[10] = 0; // deflate
+ihdr[11] = 0; // adaptive filtering
+ihdr[12] = 0; // no interlace
 
-// One filter byte per scanline; filter 0 (None) keeps the encoder honest and
-// zlib still compresses the large flat areas well.
 const raw = Buffer.alloc(SIZE * (SIZE * 4 + 1));
 for (let y = 0; y < SIZE; y += 1) {
     raw[y * (SIZE * 4 + 1)] = 0;
@@ -217,6 +255,10 @@ const png = Buffer.concat([
     chunk("IEND", Buffer.alloc(0)),
 ]);
 
-const out = process.argv[2];
+const out = process.argv.find(arg => !arg.startsWith("--") && arg.endsWith(".png"));
+if (!out) {
+    console.error("Usage: node tools/make-icon.mjs <out.png> [--size=64]");
+    process.exit(1);
+}
 fs.writeFileSync(out, png);
 console.log(`wrote ${out} — ${SIZE}x${SIZE}, ${png.length} bytes`);

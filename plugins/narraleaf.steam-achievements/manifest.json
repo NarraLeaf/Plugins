@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "narraleaf.steam-achievements",
   "name": "Steam Achievements",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Author Steam achievements and stats in Studio, and unlock them from blueprint graphs. Falls back to a local mirror wherever Steam is not available, so the same script works on itch, on the web export and in Dev Mode.",
   "publisher": "NarraLeaf Studio",
   "icon": "icon.png",
