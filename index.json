@@ -44,7 +44,7 @@
     {
       "id": "narraleaf.steam-achievements",
       "name": "Steam Achievements",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Author Steam achievements and stats in Studio, and unlock them from blueprint graphs. Falls back to a local mirror wherever Steam is not available, so the same script works on itch, on the web export and in Dev Mode.",
       "publisher": "NarraLeaf Studio",
       "path": "plugins/narraleaf.steam-achievements",
@@ -83,11 +83,11 @@
       },
       "permissions": [],
       "release": {
-        "tag": "narraleaf.steam-achievements@0.1.0",
-        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.steam-achievements%400.1.0",
-        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.steam-achievements%400.1.0/narraleaf.steam-achievements-0.1.0.zip"
+        "tag": "narraleaf.steam-achievements@0.1.1",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.steam-achievements%400.1.1",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.steam-achievements%400.1.1/narraleaf.steam-achievements-0.1.1.zip"
       },
-      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/narraleaf.steam-achievements%400.1.0/plugins/narraleaf.steam-achievements/icon.png",
+      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/narraleaf.steam-achievements%400.1.1/plugins/narraleaf.steam-achievements/icon.png",
       "studioVersion": ">=0.2.0",
       "locales": {
         "zh-CN": {
