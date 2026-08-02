@@ -14,12 +14,20 @@ path = "src/main.rs"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Pinned deliberately: the safe wrapper's shape changed across releases (0.10
-# handed out a separate `SingleClient` for callback pumping, 0.11 folded it into
-# `Client`). This source is written against 0.11. Bumping it is a code change,
-# not a version bump — see sidecar/README.md "Verification status".
-steamworks = "=0.11.0"
-steamworks-sys = "=0.11.0"
+# Pinned to a minor, deliberately: the safe wrapper's shape has moved across
+# releases (0.10 handed out a separate `SingleClient` for callback pumping, 0.11
+# folded it into `Client`, 0.13 dropped `request_current_stats` because SDK 1.59+
+# requests them during init). Bumping the minor is a code change, not a version
+# bump — see sidecar/README.md.
+#
+# `steamworks-sys` is a direct dependency because progress toasts are not on the
+# safe wrapper; see `Bridge::indicate_progress`. It must track `steamworks`
+# exactly, since the pointer it hands back crosses between them.
+steamworks = "=0.13.1"
+# There is no 0.13.1 of the -sys crate; 0.13.1 of the wrapper builds on 0.13.0
+# of it. Pinning both exactly keeps the pointer that crosses between them the
+# same type, and keeps a rebuild months from now byte-reproducible.
+steamworks-sys = "=0.13.0"
 
 [profile.release]
 opt-level = "z"

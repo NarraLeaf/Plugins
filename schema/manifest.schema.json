@@ -28,6 +28,11 @@
     },
     "description": { "type": "string" },
     "publisher": { "type": "string" },
+    "icon": {
+      "type": "string",
+      "pattern": "^(?![A-Za-z]:)(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[^\\u0000?#]+\\.([pP][nN][gG]|[wW][eE][bB][pP]|[jJ][pP][gG]|[jJ][pP][eE][gG])$",
+      "description": "Package-relative thumbnail shown beside the plugin in Studio's Launcher list. Must be square, at most 512x512 and at least 64x64, at most 512 KB, and .png/.webp/.jpg/.jpeg (no SVG, no GIF). The file must also be copied into dist/ by the build script — scripts/validate.mjs checks all of this."
+    },
     "entries": {
       "type": "object",
       "minProperties": 1,

@@ -1,20 +1,24 @@
 /**
- * Bundles each entry declared in manifest.json into dist/, then copies the
- * sidecar payload the manifest declares.
+ * Bundles each entry declared in manifest.json into dist/, then assembles the
+ * manifest that actually ships.
  *
  * Same shape as template/build.mjs — one prebundled ESM file per entry, host
- * modules left external — plus two things a sidecar plugin needs:
+ * modules left external — plus the one thing a sidecar plugin needs: the
+ * `contributes.sidecars` block is *generated here*, not authored.
  *
- * 1. Package-relative `contributes.sidecars[].targets[].include` files are
- *    copied into dist/ at exactly the paths the manifest names. Studio resolves
- *    them against the installed package root, which is what dist/ becomes.
- * 2. Every copied file is hashed and checked against the manifest's `sha256`.
- *    A mismatch is fatal: a package whose binary does not match its declared
- *    digest fails to install anyway, so failing here beats shipping it.
+ * Why generated. A sidecar target is a claim about bytes: this package carries
+ * this executable, and its sha256 is this. That claim is only true of a package
+ * that actually has the binary, and the repository has none — they are build
+ * output. Writing the block by hand would mean either placeholder digests (a lie
+ * the validator cannot catch, and one that surfaces much later as a failed game
+ * build) or a manifest describing files nobody has.
  *
- * A *missing* binary is a warning, not an error, so the JS half stays buildable
- * on a machine with no Rust toolchain. The release flow must not accept that
- * warning — see README "Building the sidecar".
+ * So: for every platform in sidecar/contribution.json whose files are all
+ * present under bin/, this copies them into dist/, hashes them, and emits the
+ * target. Platforms with no binary are dropped with a line saying so. If none
+ * survive, `contributes.sidecars` is omitted entirely — and that package is not
+ * broken, it is the mirror-only build: every node still works, Steam is simply
+ * never reached. See src/bridge.ts.
  */
 
 import crypto from "node:crypto";
@@ -36,8 +40,6 @@ const EXTERNALS = [
     "react/jsx-runtime",
     "react/jsx-dev-runtime",
 ];
-
-const DEP_INCLUDE_PREFIX = "dep:";
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf-8"));
 
@@ -79,47 +81,77 @@ for (const target of ["studio", "runtime"]) {
     console.log(`built ${target} -> dist/${entry}`);
 }
 
-const missing = [];
-for (const sidecar of manifest.contributes?.sidecars ?? []) {
-    for (const [platformKey, target] of Object.entries(sidecar.targets ?? {})) {
-        for (const include of target.include ?? []) {
-            if (include.startsWith(DEP_INCLUDE_PREFIX)) {
-                // Served by a build dependency: Studio fetches and verifies it at
-                // project build time, so it is not in this package to copy.
-                continue;
-            }
-            const source = path.join(root, ...include.split("/"));
-            if (!fs.existsSync(source)) {
-                missing.push(`${sidecar.id} ${platformKey}: ${include}`);
-                continue;
-            }
-            const digest = crypto.createHash("sha256").update(fs.readFileSync(source)).digest("hex");
-            const declared = String(target.sha256?.[include] ?? "").toLowerCase();
-            if (digest !== declared) {
-                throw new Error(
-                    `sha256 mismatch for ${include}\n  manifest: ${declared}\n  actual:   ${digest}\n` +
-                    "Update manifest.json (or rebuild the binary) — Studio rejects the package otherwise.",
-                );
-            }
+/* ------------------------------------------------------------------ sidecar */
+
+const contributionPath = path.join(root, "sidecar", "contribution.json");
+const included = [];
+const dropped = [];
+
+if (fs.existsSync(contributionPath)) {
+    const contribution = JSON.parse(fs.readFileSync(contributionPath, "utf-8"));
+    // Authoring aid only; it must not travel into the shipped manifest, whose
+    // validator rejects keys it does not know.
+    delete contribution.$comment;
+
+    const targets = {};
+    for (const [platformKey, target] of Object.entries(contribution.targets ?? {})) {
+        const sources = target.include.map(include => ({
+            include,
+            source: path.join(root, ...include.split("/")),
+        }));
+        const absent = sources.filter(file => !fs.existsSync(file.source));
+        if (absent.length) {
+            dropped.push({ platformKey, absent: absent.map(file => file.include) });
+            continue;
+        }
+
+        const sha256 = {};
+        for (const { include, source } of sources) {
+            const bytes = fs.readFileSync(source);
+            sha256[include] = crypto.createHash("sha256").update(bytes).digest("hex");
             const destination = path.join(distDir, ...include.split("/"));
             fs.mkdirSync(path.dirname(destination), { recursive: true });
             fs.copyFileSync(source, destination);
-            console.log(`copied ${include}`);
+            // The OS loader opens a sidecar by path, so the executable bit has to
+            // survive into the package. copyFileSync keeps the mode on POSIX;
+            // setting it explicitly also covers a source that lost it.
+            if (process.platform !== "win32" && include === target.entry) {
+                fs.chmodSync(destination, 0o755);
+            }
         }
+        targets[platformKey] = { entry: target.entry, include: [...target.include], sha256 };
+        included.push(platformKey);
+    }
+
+    if (included.length) {
+        manifest.contributes = { ...manifest.contributes, sidecars: [{ ...contribution, targets }] };
     }
 }
 
-// Studio reads manifest.json from the installed directory, so it ships too.
-fs.copyFileSync(path.join(root, "manifest.json"), path.join(distDir, "manifest.json"));
-console.log("copied manifest.json");
+// Studio reads manifest.json from the installed directory, so the assembled one
+// ships — not the source copy, which carries no sidecar block.
+fs.writeFileSync(path.join(distDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
+console.log("wrote dist/manifest.json");
 
-if (missing.length) {
-    console.warn("");
-    console.warn("WARNING: sidecar binaries are missing from this package:");
-    for (const item of missing) {
-        console.warn(`  - ${item}`);
+if (typeof manifest.icon === "string" && manifest.icon.trim()) {
+    const icon = manifest.icon.trim();
+    const source = path.join(root, ...icon.split("/"));
+    if (!fs.existsSync(source)) {
+        throw new Error(`manifest declares icon "${icon}" but ${source} does not exist`);
     }
-    console.warn("The bundle built, but the packaged plugin will FAIL to install:");
-    console.warn("Studio verifies every declared sha256 at install time.");
-    console.warn("See README.md -> Building the sidecar.");
+    const destination = path.join(distDir, ...icon.split("/"));
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(source, destination);
+    console.log(`copied ${icon}`);
+}
+
+console.log("");
+if (included.length) {
+    console.log(`Steam bridge included for: ${included.join(", ")}`);
+} else {
+    console.log("Steam bridge: not included — this is a mirror-only package.");
+    console.log("Every node still works; nothing is echoed to Steam. Run `yarn build:sidecar` first to include it.");
+}
+for (const { platformKey, absent } of dropped) {
+    console.log(`  dropped ${platformKey} (missing ${absent.join(", ")})`);
 }
