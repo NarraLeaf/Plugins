@@ -1,0 +1,44 @@
+{
+  "name": "@narraleaf-plugins/wakatime-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "允许 NarraLeaf Studio 与 WakaTime 通讯，实时上报工作时间，努力可见（在命令面板中输入 WakaTime 以修改设置）",
+  "license": "MPL-2.0",
+  "type": "module",
+  "keywords": [
+    "narraleaf",
+    "narraleaf-studio-plugin",
+    "wakatime",
+    "time-tracking",
+    "heartbeats",
+    "productivity"
+  ],
+  "packageManager": "yarn@4.10.3",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --dev",
+    "icon": "node tools/make-icon.mjs icon.png",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.25.0",
+    "narraleaf-studio": "^0.5.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "narraleaf": {
+    "categories": [
+      "integration",
+      "workflow"
+    ],
+    "studioVersion": ">=0.5.0",
+    "locales": {
+      "en": {
+        "name": "WakaTime",
+        "description": "Lets NarraLeaf Studio talk to WakaTime, reporting the hours as you put them in — so the effort is visible. (Type WakaTime in the command palette to change the settings.)"
+      }
+    }
+  }
+}
