@@ -95,6 +95,49 @@
           "description": "在 Studio 里编写 Steam 成就与统计量，并用蓝图节点解锁。Steam 不可用时写入本地镜像，itch 版、web 版与 Dev Mode 下同一套脚本照常工作。"
         }
       }
+    },
+    {
+      "id": "wangzixu.wakatime-plugin",
+      "name": "WakaTime",
+      "version": "1.0.0",
+      "description": "允许 NarraLeaf Studio 与 WakaTime 通讯，实时上报工作时间，努力可见（在命令面板中输入 WakaTime 以修改设置）",
+      "publisher": "WangZixu",
+      "path": "plugins/wangzixu.wakatime-plugin",
+      "targets": [
+        "studio"
+      ],
+      "categories": [
+        "integration",
+        "workflow"
+      ],
+      "keywords": [
+        "narraleaf",
+        "narraleaf-studio-plugin",
+        "wakatime",
+        "time-tracking",
+        "heartbeats",
+        "productivity"
+      ],
+      "license": "MPL-2.0",
+      "contributes": {
+        "blueprintNodes": [],
+        "widgets": [],
+        "locales": []
+      },
+      "permissions": [],
+      "release": {
+        "tag": "wangzixu.wakatime-plugin@1.0.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/wangzixu.wakatime-plugin%401.0.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/wangzixu.wakatime-plugin%401.0.0/wangzixu.wakatime-plugin-1.0.0.zip"
+      },
+      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/wangzixu.wakatime-plugin%401.0.0/plugins/wangzixu.wakatime-plugin/icon.png",
+      "studioVersion": ">=0.5.0",
+      "locales": {
+        "en": {
+          "name": "WakaTime",
+          "description": "Lets NarraLeaf Studio talk to WakaTime, reporting the hours as you put them in — so the effort is visible. (Type WakaTime in the command palette to change the settings.)"
+        }
+      }
     }
   ]
 }
