@@ -40,7 +40,19 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
     "runtimeCapabilities",
     "sidecars",
     "buildDependencies",
+    "buildConfig",
 ];
+
+/** How a build config value is typed. `secret` is stored on the author's machine, not in the project. */
+export const PLUGIN_BUILD_CONFIG_TYPES = ["text", "secret"];
+/** Which builds share one build config value. */
+export const PLUGIN_BUILD_CONFIG_SCOPES = ["global", "variant", "platform", "variant-platform"];
+/**
+ * Every platform a build can target. Wider than BINARY_PLATFORMS below, which is
+ * about binaries a plugin ships: a build config field is a value the author
+ * types, so it applies to the web and mobile targets too.
+ */
+export const BUILD_CONFIG_PLATFORMS = ["windows", "macos", "linux", "web", "android", "ios"];
 
 /**
  * Capability domains a plugin's `runtime` entry may declare. Closed list: an
@@ -329,6 +341,70 @@ function validateBuildDependencies(value, pluginId, errors) {
     return ids;
 }
 
+/**
+ * Build config field declarations: the values a plugin needs the author to
+ * supply before a build can ship.
+ *
+ * Unlike the other contributed identifiers these keys are *not* prefixed with
+ * the plugin id - the store is already per plugin - so uniqueness within the
+ * plugin is the whole of what keys a value. Declaring a field grants nothing,
+ * so nothing here feeds the derived permission kinds.
+ */
+function validateBuildConfig(value, pluginId, errors) {
+    if (value === undefined) {
+        return;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.buildConfig must be an array of field objects");
+        return;
+    }
+    const seen = new Set();
+    for (const item of value) {
+        if (!isRecord(item)) {
+            errors.push("contributes.buildConfig entries must be objects");
+            continue;
+        }
+        const key = typeof item.key === "string" ? item.key.trim() : "";
+        if (!key) {
+            errors.push(`contributes.buildConfig entries must declare a key (plugin "${pluginId}")`);
+            continue;
+        }
+        if (seen.has(key)) {
+            errors.push(`contributes.buildConfig declares "${key}" more than once`);
+        }
+        seen.add(key);
+
+        // The label is what the author sees; a blank one produces a field nothing
+        // on screen identifies.
+        const label = typeof item.label === "string" ? item.label.trim() : "";
+        if (!label) {
+            errors.push(`contributes.buildConfig["${key}"] must declare a label`);
+        }
+        if (!PLUGIN_BUILD_CONFIG_TYPES.includes(item.type)) {
+            errors.push(`contributes.buildConfig["${key}"] type must be one of: ${PLUGIN_BUILD_CONFIG_TYPES.join(", ")}`);
+        }
+        if (!PLUGIN_BUILD_CONFIG_SCOPES.includes(item.scope)) {
+            errors.push(`contributes.buildConfig["${key}"] scope must be one of: ${PLUGIN_BUILD_CONFIG_SCOPES.join(", ")}`);
+        }
+        if (item.platforms === undefined) {
+            continue;
+        }
+        // An empty list is refused rather than read as "every platform": it is a
+        // field that applies nowhere, so nothing would ever ask for it.
+        if (!Array.isArray(item.platforms) || item.platforms.length === 0) {
+            errors.push(`contributes.buildConfig["${key}"] platforms must be a non-empty array, or absent for every platform`);
+            continue;
+        }
+        for (const platform of item.platforms) {
+            const name = typeof platform === "string" ? platform.trim() : "";
+            if (!BUILD_CONFIG_PLATFORMS.includes(name)) {
+                errors.push(`contributes.buildConfig["${key}"] names an unknown platform: ${String(platform)} `
+                    + `(known: ${BUILD_CONFIG_PLATFORMS.join(", ")})`);
+            }
+        }
+    }
+}
+
 /** Returns the number of declared sidecars; pushes any problems onto `errors`. */
 function validateSidecars(value, pluginId, dependencyIds, errors) {
     if (value === undefined) {
@@ -586,6 +662,7 @@ export function validatePluginManifest(value) {
             // Build dependencies first: sidecar `dep:` includes resolve against them.
             const dependencyIds = validateBuildDependencies(value.contributes.buildDependencies, id, errors);
             const sidecars = validateSidecars(value.contributes.sidecars, id, dependencyIds, errors);
+            validateBuildConfig(value.contributes.buildConfig, id, errors);
 
             // Capabilities and sidecars are powers of the *runtime* entry.
             // Declaring them without one asks the user to approve something
