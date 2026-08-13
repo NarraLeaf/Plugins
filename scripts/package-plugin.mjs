@@ -14,6 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -21,6 +22,7 @@ import {
     pluginDir,
     releaseAssetName,
     repoRoot,
+    validatePluginManifest,
 } from "./lib/plugins.mjs";
 import { collectFiles, createZip } from "./lib/zip.mjs";
 
@@ -108,6 +110,40 @@ const distManifest = JSON.parse(fs.readFileSync(path.join(distDir, "manifest.jso
 if (distManifest.id !== manifest.id || distManifest.version !== manifest.version) {
     console.error(`dist/manifest.json (${distManifest.id}@${distManifest.version}) does not match source manifest (${manifest.id}@${manifest.version})`);
     process.exit(1);
+}
+
+// The shipped manifest is not always the committed one — a build script may add
+// to it, and a sidecar plugin's binary digests can only be computed at build
+// time. So the generated copy gets the same validator the source got, or the
+// generation step becomes the one part of the package nothing checks.
+const distResult = validatePluginManifest(distManifest);
+if (!distResult.ok) {
+    console.error(`plugins/${pluginId}/dist/manifest.json failed validation:`);
+    for (const error of distResult.errors) {
+        console.error(`  - ${error}`);
+    }
+    process.exit(1);
+}
+
+// Every file a sidecar target declares has to actually be in dist/, and its
+// digest has to be the digest of those bytes. Studio checks this when it builds
+// a game; catching it here turns a failed game build into a failed package.
+for (const sidecar of distManifest.contributes?.sidecars ?? []) {
+    for (const [platformKey, target] of Object.entries(sidecar.targets ?? {})) {
+        for (const include of target.include ?? []) {
+            const where = `sidecar "${sidecar.id}" target "${platformKey}"`;
+            const filePath = path.join(distDir, ...include.split("/"));
+            if (!fs.existsSync(filePath)) {
+                console.error(`${where} declares "${include}", which is not in dist/`);
+                process.exit(1);
+            }
+            const digest = crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+            if (digest !== String(target.sha256?.[include] ?? "").toLowerCase()) {
+                console.error(`${where}: "${include}" has sha256 ${digest}, not the declared ${target.sha256?.[include]}`);
+                process.exit(1);
+            }
+        }
+    }
 }
 
 fs.mkdirSync(outDir, { recursive: true });

@@ -8,10 +8,6 @@ then echoes to Steam; every read node reads the mirror. So the same script works
 on the Steam build, the itch build, the web export, Android, iOS, Dev Mode, and a
 dev machine with Steam closed. Degrading is the design, not a fallback.
 
-> **Status: not shippable yet.** The native bridge has never been compiled and
-> the sha256 digests in `manifest.json` are placeholders, so this package will
-> fail to install as-is. See [Building the sidecar](#building-the-sidecar).
-
 ## What it adds
 
 **An achievements editor** — a full editor tab (opened from the left rail's
@@ -75,6 +71,18 @@ The Steam connection itself still uses the catalog's App ID. Pointing it at the
 variant's would change which Steam app a demo's achievements land in, which is a
 decision to make deliberately rather than inherit from a store link.
 
+## Which platforms reach Steam
+
+The bridge is a native executable, so it exists only where one was built. A
+package carries a sidecar for a platform if, and only if, that binary was present
+when `yarn build` ran — see [Building the sidecar](#building-the-sidecar).
+
+**A package with no bridge at all is not a broken package.** It is the
+mirror-only build: every node still runs, every read still answers, nothing is
+echoed to Steam. That is already what happens on the web export and on mobile,
+which can never host a native child process, and on a desktop player who has
+Steam closed. There is one behaviour to reason about, and it is the mirror.
+
 ## Capabilities it asks for
 
 `contributes.runtimeCapabilities: ["store"]`, and nothing else.
@@ -97,39 +105,55 @@ describe "launch, install and uninstall arbitrary Steam apps" as opening a store
 page. Whichever address is asked for, Studio decides it against these patterns in
 the process that performs the act — declaring is not deciding.
 
-The Steamworks redistributable is declared as
-`contributes.buildDependencies`, so Studio fetches and verifies it at project
-build time; it is not vendored here.
+The Steam shared library (`steam_api64.dll` and its POSIX equivalents) ships
+inside the package, beside the executable that links against it. It is not
+fetched at build time and needs no Valve account: `steamworks-sys` vendors the
+SDK, and `sidecar/build.mjs` copies the very library the binary was linked
+against out of cargo's own output — so the two can never drift apart.
 
 ## Building the sidecar
 
 `sidecar/` holds the Rust source for `nl-steam-bridge`, the native child process
-that actually talks to Steamworks. **It has never been compiled** — see
-[sidecar/README.md](sidecar/README.md) for the build steps, the crate calls that
-need checking, and why cross-building is refused.
+that talks to Steamworks. Building it needs a Rust toolchain and nothing else —
+**no SDK download and no Valve partner account** — because `steamworks-sys`
+vendors the Steamworks SDK under its own `lib/steam/` and falls back to that copy
+whenever `STEAM_SDK_LOCATION` is unset.
 
-Before this plugin can be released:
+```sh
+yarn build:sidecar   # cargo build for THIS platform -> bin/<platform-arch>/
+yarn build           # copies bin/ into dist/ and writes the digests
+```
 
-1. Build the binary on each of Windows x64, macOS (universal), Linux x64.
-2. Put them under `bin/<platform-arch>/` and replace every placeholder digest in
-   `manifest.json` (they are currently 64 zeros) with the real sha256 — Studio
-   verifies each one at install.
-3. Fill in the Steamworks SDK zip digest in `contributes.buildDependencies`.
+Host platform only, deliberately: a Windows host cannot set the executable bit on
+a macOS or Linux artifact, so the packaged sidecar would arrive unrunnable — and
+Studio's build preflight refuses those combinations for exactly that reason. Each
+platform is built on its own runner; see `.github/workflows/release.yml` in the
+repository root, which does all three and packages the result.
 
-`yarn build` checks each digest and copies the payload into `dist/`. A *missing*
-binary is only a warning so the JS half stays buildable without a Rust
-toolchain; a *mismatched* one is fatal.
+### Digests are computed, never authored
+
+There is no sha256 to fill in by hand, and no `contributes.sidecars` block in
+`manifest.json`. A sidecar target is a claim about bytes — *this package carries
+this executable, and its hash is this* — and that claim is only true of a package
+that actually has the binary. This repository has none; they are build output.
+
+So `sidecar/contribution.json` holds everything about the sidecar that is *not* a
+property of a compiled artifact, and `build.mjs` supplies the rest: it includes
+each platform whose files are present, hashes them, and writes the block into
+`dist/manifest.json`. Platforms with no binary are dropped with a line saying so.
+
+Studio verifies those digests when it compiles a game — a preview or a build —
+not at install. A package whose bytes changed after installation fails there,
+with the file and both hashes named.
 
 ## Known gaps
 
-- **`yarn typecheck` fails against the published types.** The plugin is written
-  against the unreleased plugin API (the narrowed node context, `app.game.store`,
-  `app.game.sidecar`), which `narraleaf-studio@0.2.0` predates. Bump the
-  devDependency to `^0.3.0` once it is published; until then only `yarn build`
-  (esbuild, which strips types without checking them) is meaningful.
 - **Release languages are authored here, not read from the project.** The studio
   plugin surface exposes no project settings, so the catalog carries its own
   `locales` list and validation checks against that.
+- **The editor tab is English only.** It ships no `contributes.locales` pack, so
+  its headers and buttons stay English whatever Studio is set to. The authored
+  achievement *text* is fully multilingual; only the chrome is not.
 - **No `avgrate` stats.** Steam writes average-rate stats with
   `UpdateAvgRateStat(name, countThisSession, sessionLength)`, and no node here
   has a session length to give — so an `avgrate` stat could only ever reach the
@@ -144,15 +168,16 @@ toolchain; a *mismatched* one is fatal.
   requirement is therefore not validated either.
 - **Icons never reach the game.** They exist for the backend export. In-game
   achievement art should come from the gallery plugin or your own widgets.
+- **Only `windows-x64` has been run against a real Steam client.** The macOS and
+  Linux builds are wired up in CI and share every line of source, but their first
+  release should be smoke-tested on those platforms before it is trusted.
 
 ## Development
 
 ```sh
 yarn install
 yarn build          # or: yarn dev, for unminified output with sourcemaps
+yarn test           # the catalog's pure half
+yarn typecheck
+yarn icon           # regenerate icon.png
 ```
-
-To typecheck against an unreleased Studio API, stage its generated
-`packages/plugin-types/dist` somewhere and point a throwaway tsconfig's `paths`
-at it — keep the staged copy under `node_modules/` so React's types still
-resolve from this package.

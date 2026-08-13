@@ -70,7 +70,21 @@ jobs:
         working-directory: plugins/${{ matrix.plugin }}
         run: yarn typecheck
 
-      # Also proves the built output matches what manifest.json declares.
+      # Opt-in: a plugin with no "test" script is not a plugin with a failing
+      # one. `yarn run --top-level` is not it — this asks package.json directly.
+      - name: Test
+        working-directory: plugins/${{ matrix.plugin }}
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
+            yarn test
+          else
+            echo "no test script; skipping"
+          fi
+
+      # Also proves the built output matches what manifest.json declares. This
+      # runs on Linux with no Rust toolchain, so a sidecar plugin packages here
+      # in its mirror-only shape — which is exactly the shape worth checking on
+      # every push, because it is the one that must never break.
       - name: Build and package
         run: node scripts/package-plugin.mjs ${{ matrix.plugin }}
 

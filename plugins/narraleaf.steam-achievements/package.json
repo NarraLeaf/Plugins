@@ -1,6 +1,6 @@
 {
   "name": "@narraleaf-plugins/steam-achievements",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Author Steam achievements and stats in Studio, and unlock them from blueprint graphs, with a local mirror wherever Steam is not available.",
   "license": "MPL-2.0",
@@ -17,13 +17,17 @@
   "packageManager": "yarn@4.10.3",
   "scripts": {
     "build": "node build.mjs",
+    "build:sidecar": "node sidecar/build.mjs",
     "dev": "node build.mjs --dev",
+    "icon": "node tools/make-icon.mjs icon.png",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
-    "narraleaf-studio": "^0.2.0",
-    "typescript": "^5.7.0"
+    "narraleaf-studio": "^0.5.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   },
   "narraleaf": {
     "categories": [

@@ -6,34 +6,84 @@ main process spawns and talks to over newline-delimited JSON on stdio.
 It exists because Steamworks is a native C API and a plugin's runtime entry runs
 in the game's **renderer** process, which cannot load a dynamic library.
 
-## Verification status
+## Status
 
-**This code has never been compiled and has never been run.**
+Built and run against a live Steam client on `windows-x64`, with
+`steamworks 0.13.1` / `steamworks-sys 0.13.0`. Verified end to end against
+Spacewar (App ID 480), Valve's test app:
 
-It was written on a machine with no Rust toolchain and no Steamworks SDK (the SDK
-requires a Valve partner account to download), so nothing here has been checked by
-a compiler, let alone against a running Steam client. Treat it as a specification
-in Rust syntax, not as a working binary.
+- `steam.init` publishes the App ID and reports `available: true` with the real
+  App ID and game language back.
+- An unknown API name is refused by Steam (`SetAchievement(...) failed`) rather
+  than silently succeeding — which is how you know the call is reaching Steam
+  and not a stub.
+- `ACH_WIN_ONE_GAME`, `NumGames`, `IndicateAchievementProgress` and
+  `ResetAllStats` all succeed against Spacewar's real schema, and `StoreStats`
+  commits them.
+- A `req` with no `id` produces no `res` frame, and `bye` exits 0.
 
-One thing still needs verifying before any of this ships. The wire protocol was
-the other, and is now settled — it has been reconciled frame by frame against the
-host, see [The wire protocol](#the-wire-protocol).
+macOS and Linux share every line of this source and are wired into the release
+workflow, but have not been run against a Steam client. Smoke-test their first
+release.
 
-**The crate API (`src/steam.rs`).** Pinned to `steamworks = "=0.11.0"`. These
-calls are the ones most likely to be wrong, in rough order of risk:
+## Building
 
-- `SteamAPI_SteamUserStats_v013()` and
-  `SteamAPI_ISteamUserStats_IndicateAchievementProgress` from `steamworks-sys` —
-  the interface accessor carries a version suffix that changes with the SDK. If
-  the safe wrapper gained an equivalent on `AchievementHelper`, use that instead
-  and delete the `unsafe` block.
-- `UserStats::set_stat_i32` / `set_stat_f32` — spelling has moved between
-  releases (a `stat_i32(name).set(value)` helper style also exists in some).
-- `Client::init()` returning a single `Client` — true from 0.11; 0.10 and earlier
-  returned `(Client, SingleClient)` and pumped callbacks on the latter.
-- `UserStats::request_current_stats` / `store_stats` / `reset_all_stats`
-  return types (`()` vs `Result<_, _>`).
+No Steamworks SDK download, and no Valve partner account. `steamworks-sys`
+vendors the SDK under its own `lib/steam/` and its build script falls back to
+that copy whenever `STEAM_SDK_LOCATION` is unset — which is also why the crate
+builds on docs.rs. Set `STEAM_SDK_LOCATION` only if you deliberately want a
+different SDK version.
+
+From the plugin root, for the platform you are on:
+
+```sh
+yarn build:sidecar
+```
+
+That runs `cargo build --release` for the host target, drops the executable into
+`../bin/<platform-arch>/`, and copies the Steam shared library out of cargo's
+`OUT_DIR` next to it — the same bytes the executable was linked against, so the
+two can never disagree. On macOS it builds both arches and `lipo`s them into one
+universal image. Then `yarn build` in the plugin root hashes whatever is in
+`bin/` and writes the digests into the shipped manifest.
+
+### The shared library must sit next to the executable
+
+- **Windows** searches the executable's own directory first, so nothing extra is
+  needed.
+- **Linux and macOS** search an rpath, so `sidecar/build.mjs` passes
+  `-Wl,-rpath,$ORIGIN` / `@executable_path`. Without it the binary loads on the
+  build machine (where the SDK is on the library path) and fails on every
+  player's.
+
+### Cross-building
+
+Do not. A Windows host cannot set the executable bit on a macOS or Linux artifact
+(NTFS has none), so the packaged sidecar arrives unrunnable; Studio's preflight
+refuses those combinations for exactly this reason. Build each target on its own
+platform, or in CI.
+
+## The crate API
+
+Pinned to `steamworks = "=0.13.1"` with `steamworks-sys = "=0.13.0"` (there is no
+0.13.1 of the -sys crate). The wrapper's shape has moved across releases, so a
+minor bump is a code change rather than a version bump. What this source depends
+on:
+
+- `Client::init() -> SIResult<Client>` — one `Client`, which pumps its own
+  callbacks. Up to 0.10 this handed back a separate `SingleClient`.
+- `UserStats::{set_stat_i32, set_stat_f32, store_stats, reset_all_stats}` and
+  `achievement(name).set()`.
+- **No `request_current_stats`.** Valve deprecated `RequestCurrentStats` in SDK
+  1.59, which fetches the current user's stats during init, and the crate dropped
+  the binding. Calling it is not merely unnecessary now — it does not compile.
 - `Apps::current_game_language` and `Utils::app_id`.
+- `steamworks_sys::SteamAPI_SteamUserStats_v013()` plus
+  `SteamAPI_ISteamUserStats_IndicateAchievementProgress`, through raw FFI:
+  progress toasts are not on `AchievementHelper` at this version. The `_v013`
+  suffix is the interface version and moves with the SDK, so it is the first
+  thing to check on a bump. If a later release grows an equivalent on
+  `AchievementHelper`, prefer it and delete the `unsafe` block.
 
 ## The wire protocol
 
@@ -53,8 +103,7 @@ host -> {"t":"bye"}
 Four rules that are easy to get wrong:
 
 - **There is no `notify` frame type.** A notify is a `req` with no `id`, and it
-  gets no reply. (An earlier draft of this file proposed `t:"notify"`; the host
-  never sends it.)
+  gets no reply.
 - **Events are `evt`, not `event`.** This binary emits none today, but the host
   forwards them to the plugin's `handle.onEvent`.
 - **stdout is the protocol, stderr is the log.** The host classifies each stderr
@@ -90,91 +139,20 @@ player's `userData` — an author could not find it, and the plugin's runtime AP
 has no filesystem to write into it. The sidecar is the half of this plugin that
 has both.
 
-## Building
-
-Per platform-arch, on that platform (see "Cross-building" below):
-
-```sh
-# Windows x64
-cargo build --release --target x86_64-pc-windows-msvc
-# -> target/x86_64-pc-windows-msvc/release/nl-steam-bridge.exe
-#    into ../bin/windows-x64/
-
-# Linux x64
-cargo build --release --target x86_64-unknown-linux-gnu
-# -> ../bin/linux-x64/nl-steam-bridge
-
-# macOS universal — build both arches and lipo them together
-cargo build --release --target aarch64-apple-darwin
-cargo build --release --target x86_64-apple-darwin
-lipo -create -output ../bin/macos-universal/nl-steam-bridge \
-  target/aarch64-apple-darwin/release/nl-steam-bridge \
-  target/x86_64-apple-darwin/release/nl-steam-bridge
-```
-
-The `steamworks-sys` build script needs the Steamworks SDK. Download it from the
-partner site (a Valve account with a signed agreement is required — it is not
-publicly fetchable) and point `STEAM_SDK_LOCATION` at the unpacked `sdk`
-directory:
-
-```sh
-export STEAM_SDK_LOCATION=/path/to/steamworks_sdk_162/sdk
-```
-
-### The shared library must sit next to the executable
-
-`steam_api64.dll` / `libsteam_api.dylib` / `libsteam_api.so` are **not** vendored
-here — the plugin manifest declares them as a build dependency so Studio fetches
-them at project build time and lands them in the same directory as the binary.
-
-- **Windows** searches the executable's own directory first, so nothing extra is
-  needed.
-- **Linux and macOS** search an rpath. Link with `$ORIGIN` / `@executable_path`:
-
-  ```sh
-  # linux
-  RUSTFLAGS="-C link-arg=-Wl,-rpath,\$ORIGIN" cargo build --release --target x86_64-unknown-linux-gnu
-  # macos
-  RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path" cargo build --release --target aarch64-apple-darwin
-  ```
-
-  Without this the binary loads on the build machine (where the SDK is on the
-  library path) and fails on every player's.
-
-### After building
-
-1. Copy the binaries to `../bin/<platform-arch>/`.
-2. Recompute digests and paste them into `../manifest.json` — every
-   `contributes.sidecars[].targets[].sha256` currently holds a **placeholder of
-   64 zeros**, and Studio rejects the package at install until they are real:
-
-   ```sh
-   shasum -a 256 ../bin/windows-x64/nl-steam-bridge.exe
-   ```
-
-3. Do the same for the SDK zip's digest in `contributes.buildDependencies`.
-4. `yarn build` in the plugin root verifies every digest and copies the payload
-   into `dist/`.
-
-### Cross-building
-
-Do not. A Windows host cannot set the executable bit on a macOS or Linux artifact
-(NTFS has none), so the packaged sidecar arrives unrunnable; Studio's preflight
-refuses those combinations for exactly this reason. Build each target on its own
-platform, or in CI.
-
 ## Running it by hand
 
 Type the two host frames on stdin; replies come back on stdout. `480` is
 Spacewar, Valve's test app — nothing has to be placed in the directory first,
-`steam.init` is what publishes the App ID.
+`steam.init` is what publishes the App ID. Copy the shared library in beside the
+executable, or init will fail to load it.
 
 ```sh
 cd /some/writable/dir
 ./nl-steam-bridge
 {"t":"hello","protocol":1,"cwd":".","mode":"preview","game":{"name":"test","version":null}}
 {"t":"req","id":1,"method":"steam.init","params":{"appId":"480"}}
-{"t":"req","id":2,"method":"achievements.unlock","params":{"id":"WIN"}}
+{"t":"req","id":2,"method":"achievements.unlock","params":{"id":"ACH_WIN_ONE_GAME"}}
+{"t":"req","id":3,"method":"stats.store"}
 {"t":"bye"}
 ```
 

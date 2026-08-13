@@ -2,9 +2,10 @@
   "manifestVersion": 2,
   "id": "narraleaf.steam-achievements",
   "name": "Steam Achievements",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Author Steam achievements and stats in Studio, and unlock them from blueprint graphs. Falls back to a local mirror wherever Steam is not available, so the same script works on itch, on the web export and in Dev Mode.",
   "publisher": "NarraLeaf Studio",
+  "icon": "icon.png",
   "entries": {
     "studio": "main.js",
     "runtime": "runtime.js"
@@ -41,84 +42,6 @@
     "externalLinks": [
       "https://store.steampowered.com/app/*",
       "steam://store/*"
-    ],
-    "buildDependencies": [
-      {
-        "id": "narraleaf.steam-achievements.sdk",
-        "description": "Steamworks SDK redistributable binaries (steam_api64.dll / libsteam_api.dylib / libsteam_api.so)",
-        "targets": {
-          "windows-x64": {
-            "url": "https://partner.steamgames.com/downloads/steamworks_sdk_162.zip",
-            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-            "archive": "zip",
-            "files": {
-              "sdk/redistributable_bin/win64/steam_api64.dll": "bin/windows-x64/steam_api64.dll"
-            }
-          },
-          "macos-universal": {
-            "url": "https://partner.steamgames.com/downloads/steamworks_sdk_162.zip",
-            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-            "archive": "zip",
-            "files": {
-              "sdk/redistributable_bin/osx/libsteam_api.dylib": "bin/macos-universal/libsteam_api.dylib"
-            }
-          },
-          "linux-x64": {
-            "url": "https://partner.steamgames.com/downloads/steamworks_sdk_162.zip",
-            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-            "archive": "zip",
-            "files": {
-              "sdk/redistributable_bin/linux64/libsteam_api.so": "bin/linux-x64/libsteam_api.so"
-            }
-          }
-        }
-      }
-    ],
-    "sidecars": [
-      {
-        "id": "narraleaf.steam-achievements.bridge",
-        "kind": "executable",
-        "transport": "stdio-jsonl",
-        "autostart": "onRequest",
-        "startupTimeoutMs": 5000,
-        "shutdownTimeoutMs": 3000,
-        "restart": {
-          "maxRetries": 2,
-          "backoffMs": 1000
-        },
-        "targets": {
-          "windows-x64": {
-            "entry": "bin/windows-x64/nl-steam-bridge.exe",
-            "include": [
-              "bin/windows-x64/nl-steam-bridge.exe",
-              "dep:narraleaf.steam-achievements.sdk/bin/windows-x64/steam_api64.dll"
-            ],
-            "sha256": {
-              "bin/windows-x64/nl-steam-bridge.exe": "0000000000000000000000000000000000000000000000000000000000000000"
-            }
-          },
-          "macos-universal": {
-            "entry": "bin/macos-universal/nl-steam-bridge",
-            "include": [
-              "bin/macos-universal/nl-steam-bridge",
-              "dep:narraleaf.steam-achievements.sdk/bin/macos-universal/libsteam_api.dylib"
-            ],
-            "sha256": {
-              "bin/macos-universal/nl-steam-bridge": "0000000000000000000000000000000000000000000000000000000000000000"
-            }
-          },
-          "linux-x64": {
-            "entry": "bin/linux-x64/nl-steam-bridge",
-            "include": [
-              "bin/linux-x64/nl-steam-bridge",
-              "dep:narraleaf.steam-achievements.sdk/bin/linux-x64/libsteam_api.so"
-            ],
-            "sha256": {
-              "bin/linux-x64/nl-steam-bridge": "0000000000000000000000000000000000000000000000000000000000000000"
-            }
-          }
-        }
-      }
     ]
   },
   "permissions": []

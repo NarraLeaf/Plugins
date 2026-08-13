@@ -17,3 +17,9 @@ Thumbs.db
 
 # Local packaging output from scripts/package-plugin.mjs
 .out/
+
+# Rust sidecars: `target/` is cargo's scratch, `bin/` holds the compiled
+# artifacts a build drops for build.mjs to pick up. Neither is source — a
+# release builds them on each platform's own runner (see .github/workflows).
+target/
+plugins/*/bin/
