@@ -76,6 +76,7 @@
           "narraleaf.steam-achievements.getStat",
           "narraleaf.steam-achievements.available",
           "narraleaf.steam-achievements.language",
+          "narraleaf.steam-achievements.openStorePage",
           "narraleaf.steam-achievements.resetAll"
         ],
         "widgets": [],

@@ -19,6 +19,7 @@
       "narraleaf.steam-achievements.getStat",
       "narraleaf.steam-achievements.available",
       "narraleaf.steam-achievements.language",
+      "narraleaf.steam-achievements.openStorePage",
       "narraleaf.steam-achievements.resetAll"
     ],
     "runtimeData": [
@@ -26,6 +27,20 @@
     ],
     "runtimeCapabilities": [
       "store"
+    ],
+    "buildConfig": [
+      {
+        "key": "appId",
+        "label": "Steam App ID",
+        "description": "The number Steamworks gives this app, such as 480. A demo is a separate app from the game, so each build variant states its own.",
+        "type": "text",
+        "scope": "variant",
+        "required": false
+      }
+    ],
+    "externalLinks": [
+      "https://store.steampowered.com/app/*",
+      "steam://store/*"
     ],
     "buildDependencies": [
       {

@@ -50,6 +50,17 @@ const PIN_ALSO_ACHIEVEMENTS = "alsoAchievements";
 
 const CATEGORY = "Steam";
 
+/** The value the author fills in; declared in the manifest's `contributes.buildConfig`. */
+const BUILD_CONFIG_APP_ID = "appId";
+
+/**
+ * Steamworks issues App IDs as decimal numbers, and both store addresses below interpolate one
+ * into a path. A value that is not a number is refused rather than pasted in: the address it
+ * built would be one the manifest's patterns do not cover, and "the plugin does not declare this
+ * address" is not a sentence that would tell the author their App ID field holds a URL.
+ */
+const APP_ID_PATTERN = /^\d+$/;
+
 /** Reads the authored catalog. Target-specific; see the module comment. */
 export type CatalogReader = () => unknown;
 
@@ -138,6 +149,21 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
     const status = (ctx: ExecuteCtx) => steamStatus(ctx.game, appId());
     const send = (ctx: ExecuteCtx, method: string, params?: unknown) =>
         echo(ctx.game, appId(), method, params);
+
+    /**
+     * The App ID the store address is built from: the build config first, the catalog second.
+     *
+     * That order is the whole reason the field exists. A demo is a separate Steam app from the game
+     * it demos, and the field is scoped per variant, so the demo build states the demo's App ID and
+     * the release states the release's — while the catalog holds one App ID for the entire project.
+     *
+     * The catalog is still read when the variant states nothing, rather than the node failing: that
+     * one project-wide value is the App ID this plugin already opens the Steam connection with, so
+     * it names the same app. It is also the only one that exists in Dev Mode, where `config` is
+     * empty — nothing has been built for a variant there — and where the button is first tried.
+     */
+    const storeAppId = (ctx: ExecuteCtx): string =>
+        readString(ctx.game.config.get(BUILD_CONFIG_APP_ID)) || readString(appId());
 
     /**
      * Write one stat: mirror first (authoritative), then echo the absolute value
@@ -377,6 +403,64 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
                 nextPort: "next",
                 outputValues: { language: (await status(ctx)).language ?? "" },
             }),
+        },
+        {
+            type: `${PLUGIN_ID}.openStorePage`,
+            displayName: "Open Store Page",
+            category: CATEGORY,
+            keywords: ["steam", "store", "page", "link", "open", "buy", "wishlist", "demo"],
+            graphKinds: ["event", "macro"],
+            isPure: false,
+            isLatent: true,
+            pins: [
+                execIn,
+                execNext,
+                { id: "failed", kind: "output", semantic: "exec", label: "Failed" },
+                { id: "error", kind: "output", semantic: "data", valueType: "string", label: "Error" },
+            ],
+            execute: async ctx => {
+                // Every way this can go wrong leaves by `Failed` with a sentence on `Error`, and
+                // none of them throws. The button that runs this is drawn in a menu the player is
+                // looking at, and a store link is never worth taking the running game down for.
+                const fail = (error: string) => ({ nextPort: "failed", outputValues: { error } });
+                // Absent wherever nothing can hand a page over: the editor, which has no player to
+                // send anywhere, and any host older than this plugin's address permission. Both are
+                // reported, rather than the node dying on a method that is not there.
+                const navigation = ctx.game.navigation;
+                if (!navigation) {
+                    return fail(
+                        "Nothing here can open an address. The editor has no player to send "
+                        + "anywhere, and a Studio older than this plugin's store-page permission "
+                        + "has no way to ask. Try it in Dev Mode or a built game.",
+                    );
+                }
+                const id = storeAppId(ctx);
+                if (!id) {
+                    return fail("No Steam App ID for this build. Fill in \"Steam App ID\" for this "
+                        + "variant on the build dialog's Plugins page.");
+                }
+                if (!APP_ID_PATTERN.test(id)) {
+                    return fail(`"${id}" is not a Steam App ID. Steamworks issues a number, such as 480.`);
+                }
+                const page = `https://store.steampowered.com/app/${id}`;
+                // Steam being up is what makes `steam://` worth asking for: the client is there to
+                // answer it, and the player stays where they were instead of being thrown into a
+                // browser. It is not proof the *overlay* is on — a player can turn that off, and
+                // then the client's own window shows the page, which is still the store page. So
+                // the https address is what happens whenever the handler does not take the request,
+                // and immediately whenever this is not a machine running Steam at all.
+                if ((await status(ctx)).available) {
+                    const overlay = await navigation.openExternal({ url: `steam://store/${id}` });
+                    if (overlay.outcome === "opened") {
+                        return { nextPort: "next", outputValues: { error: overlay.error } };
+                    }
+                }
+                const result = await navigation.openExternal({ url: page });
+                return {
+                    nextPort: result.outcome === "opened" ? "next" : "failed",
+                    outputValues: { error: result.error },
+                };
+            },
         },
         {
             type: `${PLUGIN_ID}.resetAll`,

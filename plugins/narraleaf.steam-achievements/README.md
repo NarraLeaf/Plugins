@@ -21,7 +21,7 @@ via the language switcher, and inline validation: API-name shape and uniqueness,
 progress achievements pointing at a stat that exists, and missing text in any
 language you have declared.
 
-**Nine blueprint nodes**, all under the `Steam` category:
+**Ten blueprint nodes**, all under the `Steam` category:
 
 | Node | Local mirror | Steam |
 |---|---|---|
@@ -32,7 +32,14 @@ language you have declared.
 | Get Stat | **reads the mirror** | — |
 | Steam Available | — | `SteamAPI_Init` succeeded |
 | Steam Language | — | `GetCurrentGameLanguage` |
+| Open Store Page | — | store page in the client, else in the browser |
 | Reset All Stats | clears the mirror | `ResetAllStats` |
+
+`Open Store Page` leaves by `Failed` with a sentence on `Error` whenever the page
+cannot be handed over — no App ID for this build, an App ID that is not a number,
+or an environment with nowhere to send the player (the editor, or a Studio older
+than the plugin's address permission). It never throws: a store link is not worth
+taking a running game down for.
 
 Every node also takes an optional wired id pin that overrides the inspector's
 picker, so a graph can walk a list — an in-game achievement gallery, a debug
@@ -56,6 +63,18 @@ When Steam launched the game it has already set `SteamAppId`, and *that* wins:
 it describes the app actually running. A disagreement with the catalog is logged
 rather than acted on.
 
+**The store link uses a second App ID, stated per build variant.** A demo is a
+separate Steam app from the game it demos, and the catalog holds one App ID for
+the whole project — so `contributes.buildConfig` declares an `appId` field with
+`scope: "variant"`, filled in on the build dialog's Plugins page. `Open Store
+Page` prefers it and reads the catalog's only when the variant states nothing;
+that fallback names the same app the Steam connection is opened with, and it is
+the only App ID that exists in Dev Mode, where builds have not happened yet.
+
+The Steam connection itself still uses the catalog's App ID. Pointing it at the
+variant's would change which Steam app a demo's achievements land in, which is a
+decision to make deliberately rather than inherit from a store link.
+
 ## Capabilities it asks for
 
 `contributes.runtimeCapabilities: ["store"]`, and nothing else.
@@ -68,6 +87,15 @@ gated domain the plugin touches — no `state`, no `saves`, no `events`, no
 `app.game.sidecar` has no capability of its own: declaring
 `contributes.sidecars` *is* the request, and the install prompt names the
 binaries and platforms.
+
+`app.game.navigation` works the same way: declaring `contributes.externalLinks`
+is the request, and the prompt lists the two patterns by name —
+`https://store.steampowered.com/app/*` and `steam://store/*`. The second is not
+`steam://*` on purpose. That would also cover `steam://run/<id>`,
+`steam://install/<id>` and `steam://uninstall/<id>`, and no prompt could honestly
+describe "launch, install and uninstall arbitrary Steam apps" as opening a store
+page. Whichever address is asked for, Studio decides it against these patterns in
+the process that performs the act — declaring is not deciding.
 
 The Steamworks redistributable is declared as
 `contributes.buildDependencies`, so Studio fetches and verifies it at project
