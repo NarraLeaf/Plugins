@@ -41,6 +41,24 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
     "sidecars",
     "buildDependencies",
     "buildConfig",
+    "externalLinks",
+];
+
+/**
+ * Schemes no declaration may name, whatever it says. Studio refuses these in
+ * `EXTERNAL_LINK_PATTERN_DENIED_SCHEMES`, so a manifest carrying one fails to
+ * install and is caught here instead.
+ *
+ * The first three are not addresses at all - they are script and inline content,
+ * and handing one to the platform opener is how "open a link" becomes "run this".
+ * `file:` is an address, and that is the point: the opener runs the file's
+ * registered handler, which for an executable is the same thing.
+ */
+export const EXTERNAL_LINK_PATTERN_DENIED_SCHEMES = [
+    "javascript:",
+    "data:",
+    "vbscript:",
+    "file:",
 ];
 
 /** How a build config value is typed. `secret` is stored on the author's machine, not in the project. */
@@ -76,7 +94,7 @@ export const PLUGIN_RUNTIME_CAPABILITIES = [
  * second source of truth for the same capability, which is how an install prompt
  * and a plugin's real reach drift apart — so it is rejected, not merged.
  */
-export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency"];
+export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency", "externalLink"];
 
 /** Desktop only: web has no process to spawn and the mobile shells are WebViews. */
 const BINARY_PLATFORMS = ["windows", "macos", "linux"];
@@ -405,6 +423,148 @@ function validateBuildConfig(value, pluginId, errors) {
     }
 }
 
+/**
+ * Whether the leading label is a wildcard, and what has to be matched after it.
+ *
+ * A `*` is a wildcard only as the entire first label. `*x.example.com` is not one
+ * and never becomes one - it is rejected rather than quietly read as a literal
+ * host, which would be a declaration that looks like it grants something and
+ * grants nothing.
+ */
+function splitWildcardHost(host) {
+    const labels = host.split(".");
+    const wildcards = labels.filter(label => label.includes("*")).length;
+    if (wildcards === 0) {
+        return { wildcard: false, labels };
+    }
+    if (wildcards > 1 || labels[0] !== "*") {
+        return null;
+    }
+    return { wildcard: true, labels: labels.slice(1) };
+}
+
+/**
+ * One declared pattern taken apart, or null when it is not a pattern at all.
+ *
+ * A port of Studio's `parseExternalLinkPattern` in
+ * src/shared/types/externalLinkPattern.ts. Both sides parse rather than compare
+ * strings, because a host is a suffix-structured name: `https://store.example.com`
+ * is a *prefix* of `https://store.example.com.evil.test`, so a prefix test over
+ * the whole address is not a prefix test over the authority.
+ */
+function parseExternalLinkPattern(raw) {
+    if (typeof raw !== "string" || !raw.trim()) {
+        return null;
+    }
+    let parsed;
+    try {
+        parsed = new URL(raw.trim());
+    } catch {
+        // Everything schemeless lands here, which is what "must name a scheme"
+        // means: `store.example.com/*` is a string somebody hoped would work.
+        return null;
+    }
+    if (EXTERNAL_LINK_PATTERN_DENIED_SCHEMES.includes(parsed.protocol.toLowerCase())) {
+        return null;
+    }
+    // `https://store.example.com@evil.test/` reads as the store and goes to the
+    // attacker, and no address a game hands a browser carries a password.
+    if (parsed.username || parsed.password) {
+        return null;
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (host && !splitWildcardHost(host)) {
+        return null;
+    }
+    const path = parsed.pathname;
+    // `scheme://*` is the one form that constrains nothing below the scheme. It
+    // exists because `steam://run/480` and `steam://store/480` are different
+    // *hosts* under one scheme, so "hand `steam:` addresses to Steam" has no
+    // other spelling.
+    const wholeScheme = host === "*"
+        && parsed.port === ""
+        && (path === "" || path === "/")
+        && parsed.search === ""
+        && parsed.hash === "";
+    return {
+        scheme: parsed.protocol.toLowerCase(),
+        host,
+        port: parsed.port,
+        path,
+        search: parsed.search,
+        hash: parsed.hash,
+        wholeScheme,
+    };
+}
+
+/**
+ * A canonical key for one pattern, or null when it is not a pattern.
+ *
+ * Only ever used to decide whether a manifest declared the same thing twice.
+ * What the manifest keeps is what the author wrote, because that string is what
+ * the install prompt shows.
+ */
+export function externalLinkPatternKey(pattern) {
+    const parsed = parseExternalLinkPattern(pattern);
+    if (!parsed) {
+        return null;
+    }
+    if (parsed.wholeScheme) {
+        return `${parsed.scheme}//*`;
+    }
+    const authority = parsed.host
+        ? `//${parsed.host}${parsed.port ? `:${parsed.port}` : ""}`
+        : "";
+    return `${parsed.scheme}${authority}${parsed.path}${parsed.search}${parsed.hash}`;
+}
+
+/** Whether a string can be declared as an address pattern at all. */
+export function isValidExternalLinkPattern(pattern) {
+    return externalLinkPatternKey(pattern) !== null;
+}
+
+/**
+ * Address patterns the plugin may hand to the player's browser or platform
+ * handler. Returns the number declared; pushes any problems onto `errors`.
+ *
+ * Unlike the contributed identifier lists these carry no plugin-id prefix: they
+ * name places in the world rather than things the plugin owns. Refusing a bad
+ * one here matters more than elsewhere, because this list becomes an install
+ * permission the author approves by name - a pattern that can never match would
+ * be approved as a power and then be none, and a script scheme would be approved
+ * as an address and not be one.
+ */
+function validateExternalLinks(value, pluginId, errors) {
+    if (value === undefined) {
+        return 0;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.externalLinks must be an array of address patterns");
+        return 0;
+    }
+    const seen = new Set();
+    for (const item of value) {
+        const pattern = typeof item === "string" ? item.trim() : "";
+        if (!pattern) {
+            errors.push(`contributes.externalLinks entries must be non-empty strings (plugin "${pluginId}")`);
+            continue;
+        }
+        const key = externalLinkPatternKey(pattern);
+        if (!key) {
+            errors.push(`contributes.externalLinks entry is not an address pattern: ${pattern}. `
+                + "It must be absolute and name a scheme, must not carry credentials, may use `*` "
+                + "only as a whole leading host label or as the entire host, and must not name "
+                + `any of: ${EXTERNAL_LINK_PATTERN_DENIED_SCHEMES.join(", ")}`);
+            continue;
+        }
+        if (seen.has(key)) {
+            errors.push(`contributes.externalLinks declares "${pattern}" more than once`);
+        }
+        seen.add(key);
+    }
+    return value.length;
+}
+
 /** Returns the number of declared sidecars; pushes any problems onto `errors`. */
 function validateSidecars(value, pluginId, dependencyIds, errors) {
     if (value === undefined) {
@@ -663,16 +823,20 @@ export function validatePluginManifest(value) {
             const dependencyIds = validateBuildDependencies(value.contributes.buildDependencies, id, errors);
             const sidecars = validateSidecars(value.contributes.sidecars, id, dependencyIds, errors);
             validateBuildConfig(value.contributes.buildConfig, id, errors);
+            const externalLinks = validateExternalLinks(value.contributes.externalLinks, id, errors);
 
-            // Capabilities and sidecars are powers of the *runtime* entry.
-            // Declaring them without one asks the user to approve something
-            // nothing can use.
+            // Capabilities, sidecars and addresses are powers of the *runtime*
+            // entry. Declaring them without one asks the user to approve
+            // something nothing can use.
             if (isRecord(entries) && typeof entries.runtime !== "string") {
                 if (capabilities > 0) {
                     errors.push("contributes.runtimeCapabilities requires a runtime entry");
                 }
                 if (sidecars > 0) {
                     errors.push("contributes.sidecars requires a runtime entry");
+                }
+                if (externalLinks > 0) {
+                    errors.push("contributes.externalLinks requires a runtime entry");
                 }
             }
         }
