@@ -57,12 +57,64 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "description": "Widget types, each prefixed with the plugin id."
+        },
+        "runtimeData": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Storage namespaces the plugin owns, each prefixed with the plugin id."
+        },
+        "tests": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Tests the plugin adds to Run > Test, each prefixed with the plugin id. Alone among the code-backed contributions this asks for nothing at install: a test runs only because the author opened the dialog and started it, and what it may reach while running is gated by its own requires."
+        },
+        "locales": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/localeContribution" },
+          "description": "Translations the plugin ships. A code declared twice is refused rather than one copy silently winning."
+        },
+        "runtimeCapabilities": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "store",
+              "events",
+              "state.read",
+              "state.write",
+              "saves.read",
+              "saves.write",
+              "ui.overlay",
+              "assets",
+              "locale"
+            ]
+          },
+          "description": "Capability domains the runtime entry may reach. Closed list, so a typo fails validation rather than reading as \"asked for nothing\". Each becomes an install permission, which is why declaring one without a runtime entry is refused: it would ask the user to approve something nothing can use."
+        },
+        "sidecars": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/sidecarContribution" },
+          "description": "Native child processes shipped inside the author's game. Requires a runtime entry, for the reason runtimeCapabilities does."
+        },
+        "buildDependencies": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/buildDependencyContribution" },
+          "description": "Binaries fetched at build time and packaged into the game, for redistributables the plugin may not commit itself."
+        },
+        "buildConfig": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/buildConfigField" },
+          "description": "Values the author fills in before a build can ship. Keys carry no plugin-id prefix — the store is already per plugin — and must be unique within it."
+        },
+        "externalLinks": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/externalLinkPattern" },
+          "description": "Address patterns the plugin may hand to the player's browser or platform handler. Requires a runtime entry. The whole list becomes one install permission the author reads verbatim, so a pattern that could never match would be approved as a power and then be none."
         }
       }
     },
     "permissions": {
       "type": "array",
-      "description": "Shown to the user at install time. Request the minimum.",
+      "description": "Shown to the user at install time. Request the minimum. Only filesystem and api are written here: runtime, sidecar, buildDependency and externalLink are derived from contributes and refused when hand-written, which is what keeps the prompt and the plugin's real reach from drifting apart.",
       "items": {
         "oneOf": [
           {
@@ -95,6 +147,171 @@
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:)(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[^\\u0000?#]+$",
       "description": "Relative path inside the package. No absolute paths, no parent traversal."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "localeContribution": {
+      "type": "object",
+      "required": ["code", "messages"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$",
+          "description": "BCP-47-ish: primary subtag plus optional hyphen-joined subtags."
+        },
+        "messages": { "$ref": "#/definitions/relativeEntry" },
+        "nativeName": { "type": "string" },
+        "englishName": { "type": "string" },
+        "intl": { "type": "string" },
+        "dir": { "enum": ["ltr", "rtl"] }
+      }
+    },
+    "sidecarContribution": {
+      "type": "object",
+      "required": ["id", "targets"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Prefixed with the plugin id."
+        },
+        "kind": { "enum": ["executable", "node"], "default": "executable" },
+        "transport": { "const": "stdio-jsonl", "default": "stdio-jsonl" },
+        "autostart": { "enum": ["onGameStart", "onRequest"], "default": "onGameStart" },
+        "startupTimeoutMs": { "type": "integer", "minimum": 1, "default": 5000 },
+        "shutdownTimeoutMs": { "type": "integer", "minimum": 1, "default": 3000 },
+        "restart": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxRetries": { "type": "integer", "minimum": 0 },
+            "backoffMs": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "targets": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/definitions/binaryPlatformKey" },
+          "additionalProperties": { "$ref": "#/definitions/sidecarTarget" },
+          "description": "Desktop only: the web has no process to spawn and the mobile shells are WebViews, so a binary keyed to them could never run."
+        }
+      }
+    },
+    "sidecarTarget": {
+      "type": "object",
+      "required": ["entry", "include", "sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "entry": { "$ref": "#/definitions/relativeEntry" },
+        "include": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Every file this platform ships, the entry among them. A dep:<buildDependencyId>/<path> item is served by a declared build dependency instead of the package."
+        },
+        "sha256": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/sha256" },
+          "description": "One digest per package-relative include, and none for a file the target does not ship. dep: includes are pinned by the dependency's own digest."
+        }
+      }
+    },
+    "buildDependencyContribution": {
+      "type": "object",
+      "required": ["id", "targets"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Prefixed with the plugin id. Sidecar dep: includes resolve against it."
+        },
+        "description": { "type": "string" },
+        "targets": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/definitions/binaryPlatformKey" },
+          "additionalProperties": { "$ref": "#/definitions/buildDependencyTarget" }
+        }
+      }
+    },
+    "buildDependencyTarget": {
+      "type": "object",
+      "required": ["url", "sha256"],
+      "additionalProperties": false,
+      "description": "A zip maps archive paths through files; archive \"none\" downloads a single file and names it with fileName.",
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://",
+          "description": "https only. The digest would catch swapped bytes, but the failure mode should be \"cannot be attacked\" rather than \"attack detected after downloading it\"."
+        },
+        "sha256": { "$ref": "#/definitions/sha256" },
+        "archive": { "enum": ["zip", "none"], "default": "zip" },
+        "files": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/definitions/relativeEntry" },
+          "description": "Path inside the archive, mapped to a path inside the dependency directory."
+        },
+        "fileName": { "$ref": "#/definitions/relativeEntry" }
+      },
+      "oneOf": [
+        {
+          "properties": { "archive": { "const": "zip" } },
+          "required": ["files"]
+        },
+        {
+          "properties": { "archive": { "const": "none" } },
+          "required": ["archive", "fileName"]
+        }
+      ]
+    },
+    "buildConfigField": {
+      "type": "object",
+      "required": ["key", "label", "type", "scope"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the author sees. A blank one produces a field nothing on screen identifies."
+        },
+        "description": { "type": "string" },
+        "type": {
+          "enum": ["text", "secret"],
+          "description": "A secret is stored on the author's machine, not in the project."
+        },
+        "scope": {
+          "enum": ["global", "variant", "platform", "variant-platform"],
+          "description": "Which builds share one value."
+        },
+        "platforms": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["windows", "macos", "linux", "web", "android", "ios"] },
+          "description": "Absent for every platform. An empty list is refused rather than read as \"every platform\": it is a field that applies nowhere, so nothing would ever ask for it."
+        },
+        "required": { "type": "boolean" }
+      }
+    },
+    "externalLinkPattern": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:",
+      "not": {
+        "pattern": "^([jJ][aA][vV][aA][sS][cC][rR][iI][pP][tT]|[dD][aA][tT][aA]|[vV][bB][sS][cC][rR][iI][pP][tT]|[fF][iI][lL][eE]):"
+      },
+      "description": "Absolute and naming a scheme, carrying no credentials, using * only as a whole leading host label or as the entire host. javascript:, data: and vbscript: are not addresses at all — handing one to the platform opener is how \"open a link\" becomes \"run this\" — and file: opens whatever handler the file is registered to, which for an executable is the same thing. The parts of this a pattern cannot express are checked by scripts/validate.mjs."
+    },
+    "binaryPlatformKey": {
+      "pattern": "^(windows|macos|linux)-(x64|arm64)$|^macos-universal$",
+      "description": "<platform>-<arch>. universal is macOS only."
     }
   }
 }

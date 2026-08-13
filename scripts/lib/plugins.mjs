@@ -32,7 +32,7 @@ export const INDEX_FORMAT_VERSION = 1;
 export const PLUGIN_MANIFEST_VERSION = 2;
 export const PLUGIN_ENTRY_TARGETS = ["studio", "runtime"];
 /** Contribution kinds whose value is an array of `<pluginId>.`-prefixed type strings. */
-export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets", "runtimeData"];
+export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets", "runtimeData", "tests"];
 /** Every recognized contributes key, including the object-shaped ones. */
 export const PLUGIN_CONTRIBUTES_KEYS = [
     ...PLUGIN_CONTRIBUTES_TYPE_KEYS,
