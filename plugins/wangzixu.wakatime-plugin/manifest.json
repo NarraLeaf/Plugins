@@ -1,0 +1,13 @@
+{
+  "manifestVersion": 2,
+  "id": "wangzixu.wakatime-plugin",
+  "name": "WakaTime",
+  "version": "1.0.0",
+  "description": "允许 NarraLeaf Studio 与 WakaTime 通讯，实时上报工作时间，努力可见（在命令面板中输入 WakaTime 以修改设置）",
+  "publisher": "WangZixu",
+  "icon": "icon.png",
+  "entries": {
+    "studio": "main.js"
+  },
+  "permissions": []
+}

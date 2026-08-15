@@ -1,0 +1,52 @@
+{
+  "$comment": [
+    "The sidecar declaration, kept out of manifest.json on purpose.",
+    "",
+    "A sidecar target is only true of a package that actually carries the",
+    "binary, and this repository carries none — they are build output (see",
+    ".gitignore). Declaring them in the committed manifest would mean either",
+    "placeholder digests, which are a lie the validator cannot catch, or a",
+    "manifest that describes files nobody has.",
+    "",
+    "So build.mjs owns it instead: for every platform whose files are all",
+    "present under bin/, it copies them into dist/, computes their sha256, and",
+    "injects the target into dist/manifest.json. Platforms with no binary are",
+    "dropped; if none survive, contributes.sidecars is omitted entirely and the",
+    "package is a perfectly good mirror-only plugin.",
+    "",
+    "`sha256` is deliberately absent here. It is computed, never authored."
+  ],
+  "id": "narraleaf.steam-achievements.bridge",
+  "kind": "executable",
+  "transport": "stdio-jsonl",
+  "autostart": "onRequest",
+  "startupTimeoutMs": 5000,
+  "shutdownTimeoutMs": 3000,
+  "restart": {
+    "maxRetries": 2,
+    "backoffMs": 1000
+  },
+  "targets": {
+    "windows-x64": {
+      "entry": "bin/windows-x64/nl-steam-bridge.exe",
+      "include": [
+        "bin/windows-x64/nl-steam-bridge.exe",
+        "bin/windows-x64/steam_api64.dll"
+      ]
+    },
+    "macos-universal": {
+      "entry": "bin/macos-universal/nl-steam-bridge",
+      "include": [
+        "bin/macos-universal/nl-steam-bridge",
+        "bin/macos-universal/libsteam_api.dylib"
+      ]
+    },
+    "linux-x64": {
+      "entry": "bin/linux-x64/nl-steam-bridge",
+      "include": [
+        "bin/linux-x64/nl-steam-bridge",
+        "bin/linux-x64/libsteam_api.so"
+      ]
+    }
+  }
+}
