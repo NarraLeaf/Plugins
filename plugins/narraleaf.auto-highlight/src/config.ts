@@ -9,8 +9,13 @@
 
 import type { CharacterId } from "./planner";
 
-/** The runtime-data namespace declared in manifest.json (`contributes.runtimeData`). */
-export const CONFIG_NAMESPACE = "config";
+/**
+ * The runtime-data namespace declared in manifest.json (`contributes.runtimeData`).
+ *
+ * Prefixed with the plugin id because Studio requires it of every contributed identifier - a bare
+ * `config` fails manifest validation and the plugin does not load at all.
+ */
+export const CONFIG_NAMESPACE = "narraleaf.auto-highlight.config";
 
 export interface AutoHighlightConfig {
     /** Darken strength for non-speakers, 0..1. */
