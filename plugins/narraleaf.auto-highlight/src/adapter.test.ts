@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { applyToScene } from "./adapter";
 import { DEFAULT_CONFIG, type AutoHighlightConfig } from "./config";
-import { ACTION_IDS } from "./actions";
+import { ACTION_IDS, PLUGIN_ID } from "./actions";
 import type {
     SceneCompileContext,
     CompileBlockView,
@@ -28,7 +28,6 @@ function fakeContext(
     const injected: Record<string, BlockInjection> = {};
     const absent = new Set(opts.absent ?? []);
     const flag: RuntimeFlag = {
-        read: () => () => true,
         write: (value: boolean) => ({ t: "setFlag", value } as unknown as EngineAction),
     };
 
@@ -54,7 +53,11 @@ const cfg = (over: Partial<AutoHighlightConfig> = {}): AutoHighlightConfig => ({
 
 const dialogue = (id: string, speaker: string | null): CompileBlockView => ({ kind: "dialogue", id, speaker });
 const pluginAction = (id: string, actionId: string, params: Record<string, unknown> = {}): CompileBlockView =>
-    ({ kind: "pluginAction", id, actionId, params });
+    ({ kind: "pluginAction", id, pluginId: PLUGIN_ID, actionId, params });
+
+/** A marker row belonging to some other plugin, which this pass must treat as an ordinary row. */
+const foreignAction = (id: string, actionId: string): CompileBlockView =>
+    ({ kind: "pluginAction", id, pluginId: "someone.else", actionId, params: {} });
 
 describe("adapter — dialogue rendering", () => {
     it("wraps the speaker highlight in a guarded parallel darken", () => {
@@ -121,6 +124,34 @@ describe("adapter — markers", () => {
             { t: "darken", target: "alice", darkness: 0.5 },
             { t: "darken", target: "bob", darkness: 0 },
         ]);
+    });
+});
+
+describe("adapter — markers that are not ours", () => {
+    it("treats another plugin's marker as an ordinary row, so it does not break a run", () => {
+        // Alice speaks either side of a foreign marker. If the marker were read as a boundary, the
+        // first line would end her run and darken everyone mid-sentence - installing an unrelated
+        // plugin would change where this one dims.
+        const { ctx, injected } = fakeContext(
+            [dialogue("d1", "alice"), foreignAction("f1", "someone.else.thing"), dialogue("d2", "alice")],
+            { roster: ["alice", "bob"] },
+        );
+        applyToScene(ctx, cfg());
+
+        expect(injected["f1"]).toBeUndefined();
+        expect(injected["d1"].after ?? []).toHaveLength(0);
+        expect(injected["d2"].after).toHaveLength(1);
+    });
+
+    it("treats an unrecognized marker of our own as neutral rather than guessing", () => {
+        const { ctx, injected } = fakeContext(
+            [dialogue("d1", "alice"), pluginAction("m1", "narraleaf.auto-highlight.from-the-future"), dialogue("d2", "alice")],
+            { roster: ["alice", "bob"] },
+        );
+        applyToScene(ctx, cfg());
+
+        expect(injected["m1"]).toBeUndefined();
+        expect(injected["d1"].after ?? []).toHaveLength(0);
     });
 });
 

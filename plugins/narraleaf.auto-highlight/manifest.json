@@ -12,6 +12,9 @@
   "contributes": {
     "runtimeData": [
       "config"
+    ],
+    "runtimeCapabilities": [
+      "story.compile"
     ]
   },
   "permissions": []

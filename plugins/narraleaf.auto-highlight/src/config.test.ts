@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeConfig, DEFAULT_CONFIG } from "./config";
+import { parseCharacterList } from "./actions";
 
 describe("normalizeConfig — graceful degradation", () => {
     it("returns defaults for null / non-object (absent or unpublished config)", () => {
@@ -27,5 +28,19 @@ describe("normalizeConfig — graceful degradation", () => {
     it("keeps only string entries in exclude", () => {
         expect(normalizeConfig({ exclude: ["alice", 3, null, "bob"] }).exclude).toEqual(["alice", "bob"]);
         expect(normalizeConfig({ exclude: "nope" as unknown }).exclude).toEqual([]);
+    });
+});
+
+describe("parseCharacterList", () => {
+    it("splits on spaces and on the comma characters a Chinese keyboard produces", () => {
+        expect(parseCharacterList("Alice Bob")).toEqual(["Alice", "Bob"]);
+        expect(parseCharacterList("小明，小红、阿杰")).toEqual(["小明", "小红", "阿杰"]);
+        expect(parseCharacterList("Alice, Bob")).toEqual(["Alice", "Bob"]);
+    });
+
+    it("collapses duplicates, keeps order, and reads nothing as an empty cast", () => {
+        expect(parseCharacterList("Alice Bob Alice")).toEqual(["Alice", "Bob"]);
+        expect(parseCharacterList("   ")).toEqual([]);
+        expect(parseCharacterList(undefined)).toEqual([]);
     });
 });

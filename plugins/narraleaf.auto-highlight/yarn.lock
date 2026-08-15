@@ -390,7 +390,7 @@ __metadata:
   resolution: "@narraleaf-plugins/auto-highlight@workspace:."
   dependencies:
     esbuild: "npm:^0.25.0"
-    narraleaf-studio: "npm:^0.2.0"
+    narraleaf-studio: "npm:^0.5.0"
     typescript: "npm:^5.7.0"
     vitest: "npm:^3.2.0"
   languageName: unknown
@@ -1094,14 +1094,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"narraleaf-studio@npm:^0.2.0":
-  version: 0.2.0
-  resolution: "narraleaf-studio@npm:0.2.0"
+"narraleaf-studio@npm:^0.5.0":
+  version: 0.5.0
+  resolution: "narraleaf-studio@npm:0.5.0"
   dependencies:
     "@types/node": "npm:^24.8.1"
     "@types/react": "npm:^19.2.0"
     lucide-react: "npm:^0.546.0"
-  checksum: 10c0/4791c724a5df88f76e47f75095efc56b3d0b27c8a404d1c0e8404681e71937cc3554f25253ded7454efe3018c664bc1339cc3128b391236d1142265c5eb583ad
+  checksum: 10c0/b7231ba8029289d49e1ac7488cbc3a0243d80c063e054141cfe0d16a5c62b5797eb1e16a58c1acdb0bbbb31478c5866fe02eaa737826964c9e5a8bae3880db26
   languageName: node
   linkType: hard
 

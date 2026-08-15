@@ -13,7 +13,7 @@ the darkens are generated while the story compiles and vanish the moment the plu
 | --- | --- |
 | **Enable Auto-Highlight** | From here on, each line lights its speaker and dims the rest. |
 | **Disable Auto-Highlight** | Stop auto-highlighting and restore everyone. |
-| **Highlight Characters** | Light the chosen characters, dim the rest (a one-off override). |
+| **Highlight Characters** | Light the characters you name, dim the rest (a one-off override). |
 | **Highlight All** | Restore everyone to full brightness. |
 | **Darken All** | Dim everyone. |
 
@@ -46,16 +46,21 @@ Project-level, stored in the `config` runtime-data namespace and baked into the 
   engine actions (`adapter.test.ts`).
 - `config.ts` — the config shape, defaults, and `normalizeConfig` (graceful degradation).
 - `runtime.ts` / `main.ts` — the thin entries: register the compile pass and the story actions.
-- `contract.ts` / `studio-contract.ts` — the Studio APIs this plugin is written against.
+- `contract.ts` — the Studio types the published package does not carry yet (see above).
 
-## Status
+Name the cast on the same line you insert the action: `Highlight Characters Alice Bob`. Names are
+split on spaces and on commas (`,` `，` `、`), stored as typed, and matched against the scene's cast
+when the story compiles - a name that matches nobody is simply not lit. There is no picker for it,
+because a plugin row has no inspector to draw one in.
 
-⚠️ **This plugin depends on a Studio extension point that is not yet shipped.** The
-compile-time darken injection needs `app.game.story.registerCompilePass` (runtime) and the
-declarative story-action registration (studio). Both are specified as types in `contract.ts`
-and `studio-contract.ts` (plan `2026-07-15-003`, §3.10 / §4.2). The core planner and adapter are
-implemented and tested; the entries are written against those contracts and become live once
-Studio ships them.
+## Requires
+
+**NarraLeaf Studio 0.6.0 or newer**, and the plugin asks for one capability at install: *take part
+in compiling your stories*. That is `story.compile`, which is what lets the pass put darkens around
+lines the plugin did not write.
+
+`contract.ts` mirrors the handful of Studio types that the published `narraleaf-studio` package
+(0.5.0) does not carry yet. It goes away, along with two casts, the moment 0.6.0 is published.
 
 ## Develop
 

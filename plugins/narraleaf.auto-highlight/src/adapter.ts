@@ -8,7 +8,7 @@
  */
 
 import { plan, type Unit, type OpGroup } from "./planner";
-import { markerFor } from "./actions";
+import { markerFor, PLUGIN_ID } from "./actions";
 import { type AutoHighlightConfig } from "./config";
 import type {
     SceneCompileContext,
@@ -26,8 +26,15 @@ function toUnit(block: CompileBlockView): Unit {
         case "dialogue":
             return { kind: "dialogue", speaker: block.speaker };
         case "pluginAction": {
+            // Another plugin's marker is just a row that happens to be in the way: it says nothing
+            // about who is speaking, so it is `other` and does not break a run. Reading it as a
+            // boundary would let installing an unrelated plugin change where this one darkens.
+            if (block.pluginId !== PLUGIN_ID) {
+                return { kind: "other" };
+            }
             const marker = markerFor(block.actionId, block.params);
-            // A block of ours we don't recognize is neutral, not a run-breaker guess.
+            // One of ours we do not recognize - a row authored by a newer version - is neutral too,
+            // rather than a guess at what it might have meant.
             return marker ? { kind: "marker", marker } : { kind: "other" };
         }
         case "boundary":
