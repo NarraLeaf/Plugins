@@ -85,7 +85,8 @@
               "saves.write",
               "ui.overlay",
               "assets",
-              "locale"
+              "locale",
+              "story.compile"
             ]
           },
           "description": "Capability domains the runtime entry may reach. Closed list, so a typo fails validation rather than reading as \"asked for nothing\". Each becomes an install permission, which is why declaring one without a runtime entry is refused: it would ask the user to approve something nothing can use."

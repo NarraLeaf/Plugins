@@ -42,6 +42,46 @@
       "studioVersion": ">=0.0.1"
     },
     {
+      "id": "narraleaf.auto-highlight",
+      "name": "Auto-Highlight",
+      "version": "0.1.0",
+      "description": "Highlights whoever is speaking and dims everyone else, automatically, at compile time. Adds Enable / Disable and manual highlight story actions.",
+      "publisher": "NarraLeaf",
+      "path": "plugins/narraleaf.auto-highlight",
+      "targets": [
+        "studio",
+        "runtime"
+      ],
+      "categories": [
+        "story"
+      ],
+      "keywords": [
+        "narraleaf",
+        "narraleaf-studio-plugin",
+        "story",
+        "highlight"
+      ],
+      "license": "MPL-2.0",
+      "contributes": {
+        "blueprintNodes": [],
+        "widgets": [],
+        "locales": []
+      },
+      "permissions": [],
+      "release": {
+        "tag": "narraleaf.auto-highlight@0.1.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.auto-highlight%400.1.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.auto-highlight%400.1.0/narraleaf.auto-highlight-0.1.0.zip"
+      },
+      "studioVersion": ">=0.6.0",
+      "locales": {
+        "zh-CN": {
+          "name": "自动高亮",
+          "description": "编译时自动高亮说话的角色、压暗其他人。新增启用/停用与手动高亮的故事动作。"
+        }
+      }
+    },
+    {
       "id": "narraleaf.steam-achievements",
       "name": "Steam Achievements",
       "version": "0.1.1",
