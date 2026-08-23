@@ -18,7 +18,7 @@
   ],
   "id": "narraleaf.steam-achievements.bridge",
   "kind": "executable",
-  "transport": "stdio-jsonl",
+  "transport": "jsonl",
   "autostart": "onRequest",
   "startupTimeoutMs": 5000,
   "shutdownTimeoutMs": 3000,

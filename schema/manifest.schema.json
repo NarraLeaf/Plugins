@@ -181,7 +181,11 @@
           "description": "Prefixed with the plugin id."
         },
         "kind": { "enum": ["executable", "node"], "default": "executable" },
-        "transport": { "const": "stdio-jsonl", "default": "stdio-jsonl" },
+        "transport": {
+          "enum": ["jsonl", "stdio-jsonl"],
+          "default": "jsonl",
+          "description": "Newline-delimited JSON. The framing, not the channel: executable sidecars use stdio, node sidecars the utility process's parent port. \"stdio-jsonl\" is the older spelling and stays accepted."
+        },
         "autostart": { "enum": ["onGameStart", "onRequest"], "default": "onGameStart" },
         "startupTimeoutMs": { "type": "integer", "minimum": 1, "default": 5000 },
         "shutdownTimeoutMs": { "type": "integer", "minimum": 1, "default": 3000 },

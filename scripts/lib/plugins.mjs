@@ -101,9 +101,17 @@ export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDepe
 const BINARY_PLATFORMS = ["windows", "macos", "linux"];
 const BINARY_ARCHS = ["x64", "arm64", "universal"];
 
+/**
+ * Newline-delimited JSON names the framing, not the channel: an executable sidecar's frames travel
+ * over stdio, a node one's over the utility process's parent port. `stdio-jsonl` is the older
+ * spelling from when there was only one channel it could mean, and manifests that say it keep
+ * working - a published plugin is a file somebody already shipped.
+ */
+const SIDECAR_TRANSPORTS = ["jsonl", "stdio-jsonl"];
+
 const SIDECAR_DEFAULTS = {
     kind: "executable",
-    transport: "stdio-jsonl",
+    transport: "jsonl",
     autostart: "onGameStart",
     startupTimeoutMs: 5000,
     shutdownTimeoutMs: 3000,
@@ -595,8 +603,8 @@ function validateSidecars(value, pluginId, dependencyIds, errors) {
         if (kind !== "executable" && kind !== "node") {
             errors.push(`sidecar "${id}" kind must be "executable" or "node"`);
         }
-        if ((item.transport ?? SIDECAR_DEFAULTS.transport) !== "stdio-jsonl") {
-            errors.push(`sidecar "${id}" transport must be "stdio-jsonl"`);
+        if (!SIDECAR_TRANSPORTS.includes(item.transport ?? SIDECAR_DEFAULTS.transport)) {
+            errors.push(`sidecar "${id}" transport must be "jsonl"`);
         }
         const autostart = item.autostart ?? SIDECAR_DEFAULTS.autostart;
         if (autostart !== "onGameStart" && autostart !== "onRequest") {
