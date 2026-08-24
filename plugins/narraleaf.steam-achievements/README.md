@@ -29,13 +29,30 @@ language you have declared.
 | Steam Available | — | `SteamAPI_Init` succeeded |
 | Steam Language | — | `GetCurrentGameLanguage` |
 | Open Store Page | — | store page in the client, else in the browser |
+| Owns DLC | — | `BIsDlcInstalled` |
 | Reset All Stats | clears the mirror | `ResetAllStats` |
 
 `Open Store Page` leaves by `Failed` with a sentence on `Error` whenever the page
 cannot be handed over — no App ID for this build, an App ID that is not a number,
 or an environment with nowhere to send the player (the editor, or a Studio older
 than the plugin's address permission). It never throws: a store link is not worth
-taking a running game down for.
+taking a running game down for. Leave its App ID blank for this build's own page,
+or fill in a DLC's to send the player there instead.
+
+## Owns DLC is for offering a purchase, never for gating content
+
+`Owns DLC` answers whether this account owns the DLC with that Steam App ID. Use
+it to decide whether to draw a purchase button — showing "buy the extra chapter"
+to somebody who already bought it is the fault it fixes.
+
+**Do not gate content on it.** Whether the content is *available* is Studio's own
+`Is DLC Installed`, which reads the files beside the game. Steam can only be asked
+when it is running and reachable, so a graph that gated content on this node would
+take an offline player's bought chapter away from them.
+
+That is also why an unreachable Steam answers `Not Owned` rather than failing: the
+worst that does is offer a purchase to somebody who already made one, and the store
+page they land on says so. The other direction would hide what they paid for.
 
 Every node also takes an optional wired id pin that overrides the inspector's
 picker, so a graph can walk a list — an in-game achievement gallery, a debug

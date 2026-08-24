@@ -22,6 +22,7 @@ import {
     type AchievementCatalog,
 } from "./catalog";
 import {
+    ask,
     echo,
     readProgress,
     readStats,
@@ -47,6 +48,15 @@ const PIN_VALUE = "value";
 const PIN_CURRENT = "current";
 const PIN_MAX = "max";
 const PIN_ALSO_ACHIEVEMENTS = "alsoAchievements";
+
+/**
+ * A Steam App ID typed on the node, used by the two DLC-facing nodes.
+ *
+ * Typed rather than picked, unlike every other reference in this plugin: a DLC's App ID is issued by
+ * Steamworks and exists nowhere in the project - Studio's own DLC registry names content, not
+ * storefront products, and pairing the two is what this field IS.
+ */
+const PARAM_APP_ID = "appId";
 
 const CATEGORY = "Steam";
 
@@ -408,7 +418,9 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
             type: `${PLUGIN_ID}.openStorePage`,
             displayName: "Open Store Page",
             category: CATEGORY,
-            keywords: ["steam", "store", "page", "link", "open", "buy", "wishlist", "demo"],
+            keywords: [
+                "steam", "store", "page", "link", "open", "buy", "wishlist", "demo", "dlc",
+            ],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
@@ -418,6 +430,14 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
                 { id: "failed", kind: "output", semantic: "exec", label: "Failed" },
                 { id: "error", kind: "output", semantic: "data", valueType: "string", label: "Error" },
             ],
+            // Blank opens this build's own page, which is what it always did. Filled in, it opens
+            // that app's - which is how a "buy the extra chapter" button reaches the DLC's page
+            // rather than the game's.
+            inspectorParams: [{
+                key: PARAM_APP_ID,
+                label: "App ID",
+                kind: "string" as const,
+            }],
             execute: async ctx => {
                 // Every way this can go wrong leaves by `Failed` with a sentence on `Error`, and
                 // none of them throws. The button that runs this is drawn in a menu the player is
@@ -434,7 +454,7 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
                         + "has no way to ask. Try it in Dev Mode or a built game.",
                     );
                 }
-                const id = storeAppId(ctx);
+                const id = readString(ctx.params?.[PARAM_APP_ID]) || storeAppId(ctx);
                 if (!id) {
                     return fail("No Steam App ID for this build. Fill in \"Steam App ID\" for this "
                         + "variant on the build dialog's Plugins page.");
@@ -460,6 +480,61 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
                     nextPort: result.outcome === "opened" ? "next" : "failed",
                     outputValues: { error: result.error },
                 };
+            },
+        },
+        {
+            type: `${PLUGIN_ID}.ownsDlc`,
+            displayName: "Owns DLC",
+            category: CATEGORY,
+            keywords: ["steam", "dlc", "owns", "owned", "bought", "purchased", "entitlement", "addon"],
+            graphKinds: ["event", "macro"],
+            isPure: false,
+            isLatent: true,
+            pins: [
+                execIn,
+                { id: "owned", kind: "output", semantic: "exec", label: "Owned" },
+                { id: "notOwned", kind: "output", semantic: "exec", label: "Not Owned" },
+                { id: "isOwned", kind: "output", semantic: "data", valueType: "boolean", label: "Is Owned" },
+            ],
+            inspectorParams: [{
+                key: PARAM_APP_ID,
+                label: "DLC App ID",
+                kind: "string" as const,
+            }],
+            /**
+             * What this is for, and the one thing it must never be used for.
+             *
+             * FOR: deciding whether to offer the player a purchase. A menu that shows "Buy the extra
+             * chapter" to somebody who already bought it is the fault this node fixes.
+             *
+             * NOT FOR: deciding whether the content is available. That is `Is DLC Installed` in the
+             * host, and it reads the files beside the game. Steam can only be asked when it is
+             * running and reachable, so a graph that gated content on this node would take an
+             * offline player's bought chapter away from them.
+             *
+             * Which is why unavailable answers `Not Owned` rather than failing: the worst that does
+             * is offer a purchase to somebody who already made one, and they land on a store page
+             * that says so. The other direction would hide content.
+             */
+            execute: async ctx => {
+                const id = readString(ctx.params?.[PARAM_APP_ID]);
+                if (!APP_ID_PATTERN.test(id)) {
+                    // Said once and taken as "not owned": a menu with an unfilled node draws its
+                    // purchase button, which is the state the author is still working towards.
+                    ctx.game.log(
+                        "warning",
+                        `Owns DLC has no Steam App ID${id ? ` ("${id}" is not one)` : ""}; reading as not owned.`,
+                    );
+                    return { nextPort: "notOwned", outputValues: { isOwned: false } };
+                }
+                const reply = await ask<{ owned?: boolean }>(
+                    ctx.game,
+                    appId(),
+                    "dlc.owned",
+                    { appId: Number(id) },
+                );
+                const owned = reply?.owned === true;
+                return { nextPort: owned ? "owned" : "notOwned", outputValues: { isOwned: owned } };
             },
         },
         {

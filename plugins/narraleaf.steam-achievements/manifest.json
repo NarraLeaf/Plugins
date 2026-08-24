@@ -21,6 +21,7 @@
       "narraleaf.steam-achievements.available",
       "narraleaf.steam-achievements.language",
       "narraleaf.steam-achievements.openStorePage",
+      "narraleaf.steam-achievements.ownsDlc",
       "narraleaf.steam-achievements.resetAll"
     ],
     "runtimeData": [

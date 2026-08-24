@@ -170,6 +170,35 @@ export async function steamStatus(game: Game, appId: string | null): Promise<Ste
 }
 
 /**
+ * Ask Steam something and wait for the answer.
+ *
+ * The opposite of {@link echo} in the one way that matters: an echo is a write whose success was
+ * already decided by the mirror, so dropping it costs nothing. This is a READ, and there is no
+ * mirror to fall back on - nothing local knows what a player owns. So the caller is handed `null`
+ * for "could not ask", which is a third answer it has to decide about, rather than a `false` that
+ * would be indistinguishable from "does not own it".
+ *
+ * Never throws, for the reason every node here does not: the caller is drawing a menu.
+ */
+export async function ask<T>(
+    game: Game,
+    appId: string | null,
+    method: string,
+    params?: unknown,
+): Promise<T | null> {
+    const active = await connect(game, appId);
+    if (!active || !active.status.available) {
+        return null;
+    }
+    try {
+        return await active.handle.request<T>(method, params) ?? null;
+    } catch (error) {
+        game.log("warning", `Steam ${method} failed: ${describe(error)}`);
+        return null;
+    }
+}
+
+/**
  * Echo one call to Steam. Never throws and never blocks the story: a failed echo
  * is a log line, because the mirror write that preceded it already made the node
  * succeed.
