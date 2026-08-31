@@ -1,0 +1,49 @@
+{
+  "name": "@narraleaf-plugins/performance-inspector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An in-game profiler: frame rate, heap, long tasks, asset loads and retained memory, with reports a hotkey away.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "keywords": [
+    "narraleaf",
+    "narraleaf-studio-plugin",
+    "performance",
+    "profiler",
+    "diagnostics",
+    "overlay",
+    "assets",
+    "memory"
+  ],
+  "packageManager": "yarn@4.10.3",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --dev",
+    "icon": "node tools/make-icon.mjs icon.png",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "narraleaf-studio": "^0.5.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "narraleaf": {
+    "categories": [
+      "workflow",
+      "blueprint"
+    ],
+    "studioVersion": ">=0.9.0",
+    "locales": {
+      "zh-CN": {
+        "name": "性能检查器",
+        "description": "跑在游戏里的性能分析器。一个快捷键叫出浮层与完整面板：帧率与卡顿、JavaScript 堆、长任务、这一轮取过的每个资产及其字节数与解码耗时，以及其中还有多少仍留在内存里。报告可以按 JSON 或文字摘要复制出来，蓝图节点则让剧本自己标记区间并读回这些数字。"
+      },
+      "ja": {
+        "name": "パフォーマンス インスペクター",
+        "description": "ゲームの中で動くプロファイラ。ホットキーで HUD と詳細パネルを開き、フレームレートとヒッチ、JavaScript ヒープ、ロングタスク、この実行で取得した全アセットのバイト数とデコード時間、そのうちメモリに残っている量を表示します。レポートは JSON または文章の要約としてコピーでき、ブループリントノードからは区間の記録と数値の取得ができます。"
+      }
+    }
+  }
+}

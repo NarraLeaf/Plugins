@@ -82,6 +82,64 @@
       }
     },
     {
+      "id": "narraleaf.performance-inspector",
+      "name": "Performance Inspector",
+      "version": "0.1.0",
+      "description": "A profiler that runs inside the game. A hotkey brings up a heads-up display and a full inspector: frame rate and hitches, JavaScript heap, long tasks, every asset the run has fetched with its bytes and decode time, and how much of that is still held in memory. Reports copy out as JSON or as a written summary, and blueprint nodes let a story mark its own spans and read the numbers back.",
+      "publisher": "NarraLeaf Studio",
+      "path": "plugins/narraleaf.performance-inspector",
+      "targets": [
+        "studio",
+        "runtime"
+      ],
+      "categories": [
+        "workflow",
+        "blueprint"
+      ],
+      "keywords": [
+        "narraleaf",
+        "narraleaf-studio-plugin",
+        "performance",
+        "profiler",
+        "diagnostics",
+        "overlay",
+        "assets",
+        "memory"
+      ],
+      "license": "MPL-2.0",
+      "contributes": {
+        "blueprintNodes": [
+          "narraleaf.performance-inspector.setOverlay",
+          "narraleaf.performance-inspector.mark",
+          "narraleaf.performance-inspector.beginSpan",
+          "narraleaf.performance-inspector.endSpan",
+          "narraleaf.performance-inspector.getStats",
+          "narraleaf.performance-inspector.capture",
+          "narraleaf.performance-inspector.reset"
+        ],
+        "widgets": [],
+        "locales": []
+      },
+      "permissions": [],
+      "release": {
+        "tag": "narraleaf.performance-inspector@0.1.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.performance-inspector%400.1.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.performance-inspector%400.1.0/narraleaf.performance-inspector-0.1.0.zip"
+      },
+      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/narraleaf.performance-inspector%400.1.0/plugins/narraleaf.performance-inspector/icon.png",
+      "studioVersion": ">=0.9.0",
+      "locales": {
+        "zh-CN": {
+          "name": "性能检查器",
+          "description": "跑在游戏里的性能分析器。一个快捷键叫出浮层与完整面板：帧率与卡顿、JavaScript 堆、长任务、这一轮取过的每个资产及其字节数与解码耗时，以及其中还有多少仍留在内存里。报告可以按 JSON 或文字摘要复制出来，蓝图节点则让剧本自己标记区间并读回这些数字。"
+        },
+        "ja": {
+          "name": "パフォーマンス インスペクター",
+          "description": "ゲームの中で動くプロファイラ。ホットキーで HUD と詳細パネルを開き、フレームレートとヒッチ、JavaScript ヒープ、ロングタスク、この実行で取得した全アセットのバイト数とデコード時間、そのうちメモリに残っている量を表示します。レポートは JSON または文章の要約としてコピーでき、ブループリントノードからは区間の記録と数値の取得ができます。"
+        }
+      }
+    },
+    {
       "id": "narraleaf.steam-achievements",
       "name": "Steam Achievements",
       "version": "0.1.1",
