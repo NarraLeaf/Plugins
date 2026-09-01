@@ -54,13 +54,15 @@ On Key Down (key: F3)  →  Set Performance Overlay (show: Toggle compact displa
 On Key Down (key: F9)  →  Start Profiling  →  Set Performance Overlay (show: Toggle full panel)
 ```
 
-⚠ **A key head only fires while a page is on screen.** Studio installs the
-keyboard dispatch that reaches blueprint key heads — the global blueprint's
-included — inside the page lane, and tears it down while the game stage is
-playing, so a binding that works on the title screen goes quiet during a scene.
-Until that changes, a trigger that has to work mid-scene is a **pointer** one: an
-input intent or a widget on a Game UI surface, which are dispatched by the surface
-renderer and stay live throughout play.
+`On Key Down` is a global head, so the binding works wherever the player is — on
+the title screen and mid-scene alike. It is your binding, spelled in the same
+vocabulary as every other key the project answers to and visible in the graph
+rather than buried in a plugin.
+
+⚠ **Studio 0.9.2 and earlier only fired a key head while a page was on screen**,
+so a binding went quiet the moment the story started. If you are on one of those,
+either update or use a **pointer** trigger instead: an input intent or a widget on
+a Game UI surface, which stay live throughout play.
 
 The full panel closes from its own Close button or by clicking outside it.
 
