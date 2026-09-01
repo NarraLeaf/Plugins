@@ -85,7 +85,8 @@ export type OverlayStrings = {
     addressCount: (count: number) => string;
     requestCount: (count: number) => string;
     objectUrlCount: (count: number) => string;
-    frameCount: (count: number) => string;
+    /** The span the frame chart covers, e.g. "last 10s". */
+    frameWindow: (seconds: number) => string;
     moreRows: (count: number) => string;
     overheadPerFrame: (ms: number, frames: number) => string;
     cappedAddresses: (count: number) => string;
@@ -160,7 +161,7 @@ const EN: OverlayStrings = {
     addressCount: count => `${count} ${count === 1 ? "address" : "addresses"}`,
     requestCount: count => `${count} ${count === 1 ? "request" : "requests"}`,
     objectUrlCount: count => `${count} object ${count === 1 ? "URL" : "URLs"}`,
-    frameCount: count => `${count} ${count === 1 ? "frame" : "frames"}`,
+    frameWindow: seconds => `last ${seconds}s`,
     moreRows: count => `${count} more rows are in the report, not shown here.`,
     overheadPerFrame: (ms, frames) => `${ms}ms per frame over ${frames} frames`,
     cappedAddresses: count => `${count} addresses past the table's cap were not recorded.`,
@@ -235,7 +236,7 @@ const ZH: OverlayStrings = {
     addressCount: count => `${count} 个地址`,
     requestCount: count => `${count} 次请求`,
     objectUrlCount: count => `${count} 个 object URL`,
-    frameCount: count => `${count} 帧`,
+    frameWindow: seconds => `最近 ${seconds} 秒`,
     moreRows: count => `另有 ${count} 行只在报告里，此处未显示。`,
     overheadPerFrame: (ms, frames) => `每帧 ${ms}ms，共 ${frames} 帧`,
     cappedAddresses: count => `另有 ${count} 个地址超出表格上限，未被记录。`,
@@ -310,7 +311,7 @@ const JA: OverlayStrings = {
     addressCount: count => `${count} 件のアドレス`,
     requestCount: count => `${count} 回の要求`,
     objectUrlCount: count => `${count} 件の object URL`,
-    frameCount: count => `${count} フレーム`,
+    frameWindow: seconds => `直近 ${seconds} 秒`,
     moreRows: count => `残り ${count} 行はレポートにのみ含まれます。`,
     overheadPerFrame: (ms, frames) => `1 フレームあたり ${ms}ms、計 ${frames} フレーム`,
     cappedAddresses: count => `上限を超えた ${count} 件のアドレスは記録されていません。`,

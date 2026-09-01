@@ -200,8 +200,15 @@ export type FrameStats = {
     hitches: number;
     /** Frames that took longer than a tenth of a second, which reads as a freeze. */
     stalls: number;
-    /** The tail of the ring, oldest first, for the sparkline. */
+    /**
+     * The last {@link windowSeconds} of frame times, oldest first, for the chart.
+     *
+     * Bucketed by **maximum** rather than by average when there are more frames than the chart has
+     * room for: a spike is the thing anyone is looking for, and averaging is exactly what hides it.
+     */
     recentMs: number[];
+    /** How much time {@link recentMs} covers. Fixed, so the chart scrolls at a readable rate. */
+    windowSeconds: number;
 };
 
 export type ResourceTotals = {
@@ -286,6 +293,9 @@ export type CollectorSnapshot = {
  */
 export type QuickStats = {
     elapsedMs: number;
+    /** The same window the full panel charts, at the resolution a small chart can show. */
+    frameSeries: number[];
+    frameWindowSeconds: number;
     /** Frames per second over the last two dozen frames. */
     fps: number;
     /** The mean of those same frames, in milliseconds. */
@@ -328,7 +338,20 @@ const DEFAULT_MAX_SPANS = 400;
 const HITCH_MS = 33.34;
 const STALL_MS = 100;
 const RECENT_FRAME_WINDOW = 24;
-const SPARKLINE_FRAMES = 120;
+
+/**
+ * How much time the frame chart shows.
+ *
+ * A span rather than a sample count, and that is the whole point: 120 frames is two seconds on a
+ * 60Hz display and under one on a 144Hz one, so a chart drawn by count races on the fast machine
+ * and tells two people looking at the same game different stories. Ten seconds is long enough to
+ * see a hitch arrive and leave, and short enough that the trace is still moving.
+ */
+const FRAME_WINDOW_MS = 10_000;
+
+/** Points in the full panel's chart, and in the compact display's. */
+const FRAME_CHART_BUCKETS = 240;
+const HUD_CHART_BUCKETS = 56;
 
 function emptyByKind<T>(make: () => T): Record<ResourceKind, T> {
     const out = {} as Record<ResourceKind, T>;
@@ -358,6 +381,14 @@ class NumberRing {
 
     public get size(): number {
         return this.filled;
+    }
+
+    /** The sample `offset` back from the newest, 0 being the newest. Undefined past the end. */
+    public newest(offset: number): number | undefined {
+        if (offset < 0 || offset >= this.filled) {
+            return undefined;
+        }
+        return this.values[(this.cursor - 1 - offset + this.values.length * 2) % this.values.length];
     }
 
     /** Oldest first. */
@@ -896,12 +927,52 @@ export class PerformanceCollector {
         this.mark("profiler", "session reset");
     }
 
+    /**
+     * The frame times of the last `windowMs`, oldest first, reduced to at most `buckets` points.
+     *
+     * The window is found by walking back from the newest frame and adding the durations up, which
+     * needs no timestamps: a frame time *is* the time it covers. Gaps a backgrounded window left
+     * behind were never admitted to the ring, so the span this returns is time the game was
+     * actually drawing.
+     */
+    public frameSeries(windowMs = FRAME_WINDOW_MS, buckets = FRAME_CHART_BUCKETS): number[] {
+        const samples: number[] = [];
+        let covered = 0;
+        for (let offset = 0; offset < this.frameRing.size && covered < windowMs; offset += 1) {
+            const value = this.frameRing.newest(offset);
+            if (value === undefined) {
+                break;
+            }
+            samples.push(value);
+            covered += value;
+        }
+        samples.reverse();
+        if (samples.length <= buckets) {
+            return samples.map(value => round(value, 1));
+        }
+        const out: number[] = new Array(buckets);
+        for (let index = 0; index < buckets; index += 1) {
+            const start = Math.floor((index * samples.length) / buckets);
+            const end = Math.max(start + 1, Math.floor(((index + 1) * samples.length) / buckets));
+            let worst = 0;
+            for (let cursor = start; cursor < end; cursor += 1) {
+                if (samples[cursor] > worst) {
+                    worst = samples[cursor];
+                }
+            }
+            out[index] = round(worst, 1);
+        }
+        return out;
+    }
+
     /** See {@link QuickStats}. Touches only the tail of the frame ring and the running totals. */
     public quick(): QuickStats {
         const recent = this.frameRing.toArray(RECENT_FRAME_WINDOW);
         const total = recent.reduce((sum, value) => sum + value, 0);
         return {
             elapsedMs: round(this.elapsed),
+            frameSeries: this.frameSeries(FRAME_WINDOW_MS, HUD_CHART_BUCKETS),
+            frameWindowSeconds: FRAME_WINDOW_MS / 1000,
             fps: total > 0 ? round((recent.length * 1000) / total, 1) : 0,
             frameMs: recent.length > 0 ? round(total / recent.length) : 0,
             hitches: this.hitches,
@@ -930,6 +1001,7 @@ export class PerformanceCollector {
                 hitches: this.hitches,
                 stalls: this.stalls,
                 recentMs: [],
+                windowSeconds: FRAME_WINDOW_MS / 1000,
             };
         }
         const sorted = [...all].sort((left, right) => left - right);
@@ -946,7 +1018,8 @@ export class PerformanceCollector {
             worstMs: round(this.worstFrameMs),
             hitches: this.hitches,
             stalls: this.stalls,
-            recentMs: all.slice(Math.max(0, all.length - SPARKLINE_FRAMES)).map(value => round(value, 1)),
+            recentMs: this.frameSeries(),
+            windowSeconds: FRAME_WINDOW_MS / 1000,
         };
     }
 

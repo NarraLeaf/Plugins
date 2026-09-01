@@ -1,6 +1,7 @@
 /**
- * What the player's window shows: a compact heads-up display, and a full panel behind the same
- * hotkey with Shift held.
+ * What the player's window shows: a compact heads-up display, and a full panel. Which of the two is
+ * up is the profiler's own state, moved by a `Set Performance Overlay` node - this file draws it and
+ * binds nothing.
  *
  * Two things shape every line of this file.
  *
@@ -83,10 +84,13 @@ function useProfiler(profiler: Profiler): number {
 
 type SparklineProps = {
     values: number[];
+    /** The coordinate space the points are drawn in; `fluid` then stretches it to whatever is there. */
     width: number;
     height: number;
     /** The value drawn as a guide line, when one is meaningful. */
     reference?: number;
+    /** Fill the available width instead of taking exactly `width` pixels. */
+    fluid?: boolean;
 };
 
 /**
@@ -94,32 +98,57 @@ type SparklineProps = {
  *
  * Two decisions, both about what a chart is allowed to imply.
  *
- * **A series with a reference is scaled against it**, not against its own data: a run comfortably
- * inside the frame budget should look flat, and a chart that always fills its box makes a smooth
- * game and a stuttering one indistinguishable at a glance.
+ * **A series with a reference is scaled against it and against its own 95th percentile**, never
+ * against its maximum. Scaling to the maximum means one 1.4-second stall squashes the other ten
+ * seconds into a flat line at the bottom - and a stall is exactly when someone opens the chart, so
+ * the reading would be destroyed by the event that prompted it. Anything above the ceiling is drawn
+ * clamped to the top edge, which reads as off the chart; `max`, the hitch count and the stall count
+ * are the fields that carry how far off.
  *
- * **A series without one is scaled to its own range, with headroom at both ends.** A heap that has
- * not moved would otherwise draw along the very top edge with half its stroke clipped, which reads
- * as a broken chart rather than as a steady one.
+ * **A series without a reference is scaled to its own range, with headroom at both ends.** A heap
+ * that has not moved would otherwise draw along the very top edge with half its stroke clipped,
+ * which reads as a broken chart rather than as a steady one.
  */
-function Sparkline({ values, width, height, reference }: SparklineProps) {
+function Sparkline({ values, width, height, reference, fluid }: SparklineProps) {
     if (values.length === 0) {
         return null;
     }
-    const highest = Math.max(reference ? reference * 2 : 0, ...values, 1);
+    const sorted = [...values].sort((left, right) => left - right);
+    const percentile95 = sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(0.95 * sorted.length) - 1))] ?? 0;
+    const highest = reference
+        ? Math.max(reference * 2, percentile95 * 1.25)
+        : Math.max(...values, 1);
     const lowest = reference ? 0 : Math.min(...values);
     const span = Math.max(highest - lowest, highest * 0.08, 1);
     const floor = lowest - span * 0.15;
     const ceiling = highest + span * 0.15;
-    const project = (value: number): number => height - ((value - floor) / (ceiling - floor)) * height;
+    const project = (value: number): number => {
+        const clamped = Math.min(Math.max(value, floor), ceiling);
+        return height - ((clamped - floor) / (ceiling - floor)) * height;
+    };
     const step = values.length > 1 ? width / (values.length - 1) : width;
     const points = values
         .map((value, index) => `${(index * step).toFixed(1)},${project(value).toFixed(1)}`)
         .join(" ");
     const referenceY = reference ? project(reference) : null;
     return (
-        <svg width={width} height={height} style={{ display: "block" }} aria-hidden="true">
-            <polyline points={points} fill="none" stroke={ACCENT} strokeWidth={1} />
+        <svg
+            viewBox={`0 0 ${width} ${height}`}
+            width={fluid ? "100%" : width}
+            height={height}
+            // Stretched horizontally on purpose: a sparkline has no aspect ratio to preserve, and
+            // the stroke is pinned so the line does not thicken with the box.
+            preserveAspectRatio={fluid ? "none" : undefined}
+            style={{ display: "block" }}
+            aria-hidden="true"
+        >
+            <polyline
+                points={points}
+                fill="none"
+                stroke={ACCENT}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+            />
             {referenceY !== null ? (
                 <line
                     x1={0}
@@ -129,6 +158,7 @@ function Sparkline({ values, width, height, reference }: SparklineProps) {
                     stroke="rgba(255,255,255,0.25)"
                     strokeDasharray="3 3"
                     strokeWidth={1}
+                    vectorEffect="non-scaling-stroke"
                 />
             ) : null}
         </svg>
@@ -171,6 +201,14 @@ function Hud({ profiler, strings, corner }: HudProps) {
             {stats.heapSupported ? cell(strings.hudHeap, formatBytes(stats.heapUsedBytes)) : null}
             {cell(strings.hudHeld, `${stats.retainedBlobs} / ${formatBytes(stats.retainedBytes)}`)}
             {cell(strings.hudLoaded, `${stats.addresses} / ${formatBytes(stats.bytes)}`)}
+            {stats.frameSeries.length > 0 ? (
+                <div style={{ marginTop: 5 }}>
+                    <Sparkline values={stats.frameSeries} width={148} height={26} reference={BUDGET_60_MS} fluid />
+                    <div style={{ color: TEXT_DIM, fontSize: 9, marginTop: 1 }}>
+                        {strings.frameWindow(stats.frameWindowSeconds)}
+                    </div>
+                </div>
+            ) : null}
             {profiler.isRunning() ? null : (
                 <div style={{ marginTop: 4, color: WARN, fontSize: 10, whiteSpace: "nowrap" }}>
                     {strings.notMeasuring}
@@ -605,9 +643,9 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                                 <Stat label="max" value={`${frames.worstMs}ms`} />
                             </StatRow>
                             <Section title={strings.framePercentiles}>
-                                <Sparkline values={frames.recentMs} width={880} height={90} reference={BUDGET_60_MS} />
+                                <Sparkline values={frames.recentMs} width={880} height={90} reference={BUDGET_60_MS} fluid />
                                 <div style={{ color: TEXT_DIM, fontSize: 10, marginTop: 4 }}>
-                                    {`${strings.frameCount(frames.recentMs.length)} - ${strings.budgetLine(Number(BUDGET_60_MS.toFixed(1)))}`}
+                                    {`${strings.frameWindow(frames.windowSeconds)} - ${strings.budgetLine(Number(BUDGET_60_MS.toFixed(1)))}`}
                                 </div>
                             </Section>
                             <Section title={strings.longTasks}>
@@ -656,7 +694,7 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                             </StatRow>
                             {snapshot.heap.supported ? (
                                 <Section title={strings.heapUsed}>
-                                    <Sparkline values={snapshot.heap.recentUsedBytes} width={880} height={70} />
+                                    <Sparkline values={snapshot.heap.recentUsedBytes} width={880} height={70} fluid />
                                 </Section>
                             ) : null}
                             <Section title={strings.heldInMemory}>

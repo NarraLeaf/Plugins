@@ -111,6 +111,52 @@ describe("frames", () => {
     });
 });
 
+describe("frameSeries", () => {
+    it("covers a span of time rather than a count of frames", () => {
+        const { collector } = makeCollector();
+        // Twelve seconds of 60Hz frames; a ten-second window must not reach the first two.
+        feedFrames(collector, [...Array(720).fill(16.7)]);
+        const series = collector.frameSeries(10_000, 1000);
+        // Sum of the returned durations is the span it covers.
+        const covered = series.reduce((sum, value) => sum + value, 0);
+        expect(covered).toBeGreaterThan(9_900);
+        expect(covered).toBeLessThan(10_100);
+    });
+
+    it("takes as many frames as ten seconds happens to contain, whatever the refresh rate", () => {
+        const sixty = makeCollector().collector;
+        feedFrames(sixty, [...Array(900).fill(16.7)]);
+        const hundredForty = makeCollector().collector;
+        feedFrames(hundredForty, [...Array(2000).fill(6.94)]);
+
+        // The point of windowing by time: both chart the same ten seconds, so the fast machine takes
+        // more samples to do it rather than racing through four times as much of the run.
+        expect(sixty.frameSeries(10_000, 5000)).toHaveLength(Math.ceil(10_000 / 16.7));
+        expect(hundredForty.frameSeries(10_000, 5000)).toHaveLength(Math.ceil(10_000 / 6.94));
+    });
+
+    it("keeps a spike when it has to reduce the points", () => {
+        const { collector } = makeCollector();
+        feedFrames(collector, [...Array(300).fill(16), 250, ...Array(300).fill(16)]);
+        const series = collector.frameSeries(10_000, 20);
+        expect(series).toHaveLength(20);
+        // Averaging would bury it; the maximum is the whole reason anyone opens the chart.
+        expect(Math.max(...series)).toBe(250);
+    });
+
+    it("returns the samples themselves when there are fewer than the chart has room for", () => {
+        const { collector } = makeCollector();
+        feedFrames(collector, [16, 17, 18]);
+        expect(collector.frameSeries(10_000, 240)).toEqual([16, 17, 18]);
+    });
+
+    it("is oldest first, so the chart scrolls to the left", () => {
+        const { collector } = makeCollector();
+        feedFrames(collector, [10, 20, 30]);
+        expect(collector.frameSeries(10_000, 240)).toEqual([10, 20, 30]);
+    });
+});
+
 describe("resource accounting", () => {
     it("takes the larger of the two request counts rather than their sum", () => {
         const { collector, advance } = makeCollector();

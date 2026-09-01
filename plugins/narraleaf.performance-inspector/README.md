@@ -26,7 +26,7 @@ The **Performance** panel on the right rail holds every setting.
 | Overlay at game start | Nothing | Start a run with the display already up, without wiring anything. |
 | Compact display corner | Top left | |
 | Measure asset loading | On | Sizes, request counts, decode time and retention. |
-| Frame history | 60 s | How far the chart and the percentiles reach back. |
+| Frame history | 60 s | How far the percentiles reach back. The chart is always the last ten seconds. |
 | Reports in the game log | On | |
 
 **Availability is the setting to be deliberate about.** Left alone, the profiler
@@ -79,7 +79,13 @@ through to whatever is under it.
 what has been loaded, and the playthrough counters.
 
 **Frames** — the frame-time chart against the 60Hz budget, percentiles, long
-tasks and total blocking time, and the profiler's own per-frame cost.
+tasks and total blocking time, and the profiler's own per-frame cost. The chart is
+a scrolling **ten-second** window, and it is ten seconds on every machine: a chart
+drawn by frame count would be two seconds on a 60Hz display and under one on a
+144Hz one, so two people looking at the same game would not be looking at the same
+thing. Where there are more frames than points, each point is the **worst** frame
+it covers — averaging hides exactly the spike you opened the chart for. The
+compact display carries the same chart, smaller.
 
 **Assets** — every address the run touched: kind, how many times it was fetched,
 bytes, decode time, and whether it is still held. Sortable, filterable. An
