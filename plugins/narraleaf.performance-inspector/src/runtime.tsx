@@ -92,6 +92,8 @@ export default defineRuntimePlugin({
             startProfiling: () => profiler.startFresh(),
             stopProfiling: () => profiler.stop(),
             setView: view => profiler.setView(view),
+            toggleHud: () => profiler.toggleHud(),
+            toggleInspector: () => profiler.toggleInspector(),
             mark: label => profiler.mark("author", label),
             beginSpan: name => profiler.beginSpan(name),
             endSpan: name => profiler.endSpan(name),

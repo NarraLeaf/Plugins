@@ -23,6 +23,15 @@ import { PLUGIN_ID, OVERLAY_VIEWS, type OverlayView } from "./settings";
 const CATEGORY = "Performance";
 
 const PARAM_VIEW = "view";
+/**
+ * The two `view` values that are not a view.
+ *
+ * Prefixed so they can never collide with an {@link OverlayView}, which is what the same field also
+ * holds - one key that opens and closes wants a flip, and a graph putting the overlay into a known
+ * state wants an absolute value, and both are the same authored choice.
+ */
+const TOGGLE_HUD = "toggle:hud";
+const TOGGLE_INSPECTOR = "toggle:inspector";
 const PARAM_LABEL = "label";
 const PARAM_NAME = "name";
 const PIN_LABEL = "labelIn";
@@ -44,6 +53,10 @@ export type NodeBridge = {
     /** Take the probes back out. What was collected stays readable. */
     stopProfiling(): void;
     setView(view: OverlayView): void;
+    /** Show the compact display, or put it away if it is already up. */
+    toggleHud(): void;
+    /** Open the full panel, or close it if it is already open. */
+    toggleInspector(): void;
     mark(label: string): void;
     beginSpan(name: string): void;
     /** Milliseconds, or null when nothing had opened that span. */
@@ -58,6 +71,8 @@ export const inertBridge: NodeBridge = {
     startProfiling: () => undefined,
     stopProfiling: () => undefined,
     setView: () => undefined,
+    toggleHud: () => undefined,
+    toggleInspector: () => undefined,
     mark: () => undefined,
     beginSpan: () => undefined,
     endSpan: () => null,
@@ -152,6 +167,11 @@ export function createPerformanceNodes(bridge: NodeBridge): PluginBlueprintNodeD
                     label: "Show",
                     kind: "select",
                     options: [
+                        // The two toggles come first because one key that opens and closes is what
+                        // a binding almost always wants; the three absolute values are for a graph
+                        // that is putting the overlay into a known state rather than flipping it.
+                        { value: TOGGLE_HUD, label: "Toggle compact display" },
+                        { value: TOGGLE_INSPECTOR, label: "Toggle full panel" },
                         { value: "hidden", label: "Hidden" },
                         { value: "hud", label: "Compact display" },
                         { value: "inspector", label: "Full panel" },
@@ -159,11 +179,18 @@ export function createPerformanceNodes(bridge: NodeBridge): PluginBlueprintNodeD
                 },
             ],
             execute: ctx => {
-                const requested = readString(ctx.params[PARAM_VIEW], "hud");
-                const view = (OVERLAY_VIEWS as readonly string[]).includes(requested)
-                    ? (requested as OverlayView)
-                    : "hud";
-                bridge.setView(view);
+                const requested = readString(ctx.params[PARAM_VIEW], TOGGLE_HUD);
+                if (requested === TOGGLE_HUD) {
+                    bridge.toggleHud();
+                } else if (requested === TOGGLE_INSPECTOR) {
+                    bridge.toggleInspector();
+                } else {
+                    bridge.setView(
+                        (OVERLAY_VIEWS as readonly string[]).includes(requested)
+                            ? (requested as OverlayView)
+                            : "hud",
+                    );
+                }
                 return { nextPort: "next" };
             },
         },

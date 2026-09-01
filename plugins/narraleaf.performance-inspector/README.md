@@ -41,20 +41,26 @@ them apart; offering the choice would promise a distinction that is not there.
 
 ## In the game
 
-**Opening it is a node.** `Set Performance Overlay` takes `Hidden`, `Compact
-display` or `Full panel`. Wire it to whatever you like: a key, a button on a debug
-page, a story row at the top of the chapter you are measuring.
+**Opening it is a node.** `Set Performance Overlay` takes `Toggle compact
+display`, `Toggle full panel`, or one of the three absolute values (`Hidden`,
+`Compact display`, `Full panel`). Wire it to whatever you like: a key, a button on
+a debug page, a story row at the top of the chapter you are measuring. Reach for a
+toggle when a single binding should both open and close it.
 
 The two-node recipe for a key, in the game's **global** blueprint:
 
 ```
-On Key Down (key: F3)  →  Set Performance Overlay (show: Compact display)
-On Key Down (key: F9)  →  Start Profiling  →  Set Performance Overlay (show: Full panel)
+On Key Down (key: F3)  →  Set Performance Overlay (show: Toggle compact display)
+On Key Down (key: F9)  →  Start Profiling  →  Set Performance Overlay (show: Toggle full panel)
 ```
 
-`On Key Down` is a global head, so the binding works wherever the player is, and
-it is your binding — spelled in the same vocabulary as every other key the project
-answers to, and visible in the graph rather than buried in a plugin.
+⚠ **A key head only fires while a page is on screen.** Studio installs the
+keyboard dispatch that reaches blueprint key heads — the global blueprint's
+included — inside the page lane, and tears it down while the game stage is
+playing, so a binding that works on the title screen goes quiet during a scene.
+Until that changes, a trigger that has to work mid-scene is a **pointer** one: an
+input intent or a widget on a Game UI surface, which are dispatched by the surface
+renderer and stay live throughout play.
 
 The full panel closes from its own Close button or by clicking outside it.
 
