@@ -1,0 +1,35 @@
+{
+  "manifestVersion": 2,
+  "id": "narraleaf.performance-inspector",
+  "name": "Performance Inspector",
+  "version": "0.1.0",
+  "description": "A profiler that runs inside the game. Blueprint nodes start it and open its overlay - bind a key with an On Key Down head if you want one - and it reports frame rate and hitches, JavaScript heap, long tasks, every asset the run has fetched with its bytes and decode time, and how much of that is still held in memory. Reports copy out as JSON or as a written summary.",
+  "publisher": "NarraLeaf Studio",
+  "icon": "icon.png",
+  "entries": {
+    "studio": "main.js",
+    "runtime": "runtime.js"
+  },
+  "contributes": {
+    "blueprintNodes": [
+      "narraleaf.performance-inspector.startProfiling",
+      "narraleaf.performance-inspector.stopProfiling",
+      "narraleaf.performance-inspector.setOverlay",
+      "narraleaf.performance-inspector.mark",
+      "narraleaf.performance-inspector.beginSpan",
+      "narraleaf.performance-inspector.endSpan",
+      "narraleaf.performance-inspector.getStats",
+      "narraleaf.performance-inspector.capture"
+    ],
+    "runtimeData": [
+      "narraleaf.performance-inspector.settings"
+    ],
+    "runtimeCapabilities": [
+      "events",
+      "ui.overlay",
+      "store",
+      "locale"
+    ]
+  },
+  "permissions": []
+}
