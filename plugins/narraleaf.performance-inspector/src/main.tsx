@@ -159,7 +159,7 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
             <div className="min-h-0 flex-1 overflow-y-auto">
                 <ui.Panel.Section title="Availability">
                     <ui.Panel.Row
-                        label="Where the overlay can be opened"
+                        label="Overlay availability"
                         description={
                             settings.availability === "everywhere"
                                 ? "Previews and built games carry the overlay. Anyone who presses the hotkey can open it."
@@ -191,7 +191,7 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                         }
                     />
                     <ui.Panel.Row
-                        label="Overlay shown when the game starts"
+                        label="Overlay at game start"
                         control={
                             <ui.Select
                                 size="sm"
@@ -207,7 +207,7 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                         }
                     />
                     <ui.Panel.Row
-                        label="Corner for the compact display"
+                        label="Compact display corner"
                         control={
                             <ui.Select
                                 size="sm"
@@ -228,7 +228,7 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                 <ui.Panel.Section title="Collection">
                     <ui.Panel.Row
                         label="Measure asset loading"
-                        description="Records each asset's size, how many times it was fetched, how long it took to decode, and how much of it the game is still holding in memory."
+                        description="Asset sizes, request counts, decode time, and what is still held in memory."
                         control={
                             <ui.Switch
                                 checked={settings.instrumentAssets}
@@ -239,7 +239,7 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                         }
                     />
                     <ui.Panel.Row
-                        label="Frame history kept"
+                        label="Frame history"
                         description="How far back the frame-time chart and the percentiles reach."
                         control={
                             <ui.Select
@@ -255,8 +255,8 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                         }
                     />
                     <ui.Panel.Row
-                        label="Write captured reports to the game log"
-                        description="Every capture also lands in the log file the build writes, so a report survives the run that produced it."
+                        label="Reports in the game log"
+                        description="A capture also lands in the log file the build writes, so it survives the run."
                         control={
                             <ui.Switch
                                 checked={settings.logOnCapture}
@@ -271,7 +271,7 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                 <ui.Panel.Section title="In the game">
                     <ui.Panel.Row
                         label="Reports"
-                        description="The full panel copies a report to the clipboard as JSON or as a written summary, and keeps the last capture in plugin storage."
+                        description="The full panel copies a report as JSON or as a written summary, and keeps the last capture in plugin storage."
                     />
                     <ui.Panel.Row
                         label="Blueprint nodes"

@@ -183,6 +183,11 @@ export class Profiler {
         this.collector.mark(kind, label, detail);
     }
 
+    /** See `PerformanceCollector.sceneOrdinal`. */
+    public sceneOrdinal(sceneId: string | null | undefined): number | null {
+        return this.collector.sceneOrdinal(sceneId);
+    }
+
     public count(counter: keyof CollectorCounters, by = 1): void {
         this.collector.count(counter, by);
     }

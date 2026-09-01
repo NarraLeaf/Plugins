@@ -185,12 +185,18 @@ export default defineRuntimePlugin({
 
         on("preloadComplete", () => profiler.mark("boot", "preload complete"));
         on("firstSceneReady", () => profiler.mark("boot", "first scene ready"));
+        // Numbered, not identified: the engine names a scene with a UUID, and a UUID on a surface
+        // someone reads is not information. The report's `scenes` table keeps the ids for tools.
+        const sceneEvent = (sceneId: string | null, verb: string): string => {
+            const ordinal = profiler.sceneOrdinal(sceneId);
+            return ordinal === null ? `scene ${verb}` : `scene ${ordinal} ${verb}`;
+        };
         on("sceneEnter", payload => {
             profiler.count("scenesEntered");
-            profiler.mark("engine", "scene enter", payload.sceneId ?? undefined);
+            profiler.mark("engine", sceneEvent(payload.sceneId, "entered"));
         });
         on("sceneExit", payload => {
-            profiler.mark("engine", "scene exit", payload.sceneId ?? undefined);
+            profiler.mark("engine", sceneEvent(payload.sceneId, "left"));
         });
         // Counted rather than marked: a playthrough produces thousands of these, and a timeline that
         // is one line per line of dialogue is a timeline nobody can read.

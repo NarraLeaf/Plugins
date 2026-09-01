@@ -78,6 +78,7 @@ export type ProbeScope = {
         revokeObjectURL?: (url: string) => void;
     };
     HTMLImageElement?: { prototype: Record<string, unknown> };
+    AudioContext?: { prototype: Record<string, unknown> };
 };
 
 export type ProbeTeardown = () => void;
@@ -287,6 +288,14 @@ export function installNetworkProbes({ scope, collector }: FrameSamplerOptions):
     }
     const teardowns: ProbeTeardown[] = [];
     const blobOrigins = new WeakMap<object, string>();
+    /**
+     * Array buffers, tied back to the address they were read from.
+     *
+     * Separate from {@link blobOrigins} because the two are handed to different decoders: a blob
+     * becomes an object URL and then an image, an array buffer goes straight to `decodeAudioData`.
+     * Both are weak, so tracking a payload never keeps it alive.
+     */
+    const bufferOrigins = new WeakMap<object, string>();
 
     const originalFetch = scope.fetch;
     if (typeof originalFetch === "function" && !isProbe(originalFetch)) {
@@ -350,9 +359,9 @@ export function installNetworkProbes({ scope, collector }: FrameSamplerOptions):
                             const type = (body as { type?: unknown })?.type;
                             collector.resourceBytes(url, bytes, typeof type === "string" ? type : null);
                             if (typeof body === "object" && body !== null) {
-                                // The tie between a blob and the address its bytes came from. Weak,
-                                // so holding it never keeps a payload alive.
-                                blobOrigins.set(body as object, url);
+                                // The tie between a payload and the address its bytes came from.
+                                // Weak, so holding it never keeps a payload alive.
+                                (method === "blob" ? blobOrigins : bufferOrigins).set(body as object, url);
                             }
                         });
                         return body;
@@ -430,6 +439,41 @@ export function installNetworkProbes({ scope, collector }: FrameSamplerOptions):
         });
     }
 
+    const audioProto = scope.AudioContext?.prototype;
+    const originalDecodeAudio = audioProto?.decodeAudioData;
+    if (audioProto && typeof originalDecodeAudio === "function" && !isProbe(originalDecodeAudio)) {
+        const decodeAudio = originalDecodeAudio as (this: unknown, ...args: unknown[]) => Thenable<unknown>;
+        const patched = markProbe(function patchedDecodeAudioData(this: unknown, ...args: unknown[]) {
+            const startedAt = clock.now();
+            // Read before delegating: decoding detaches the buffer, and an address read afterwards
+            // would be an address read off something the caller no longer owns.
+            const source = typeof args[0] === "object" && args[0] !== null
+                ? bufferOrigins.get(args[0] as object) ?? ""
+                : "";
+            const record = (): void => {
+                quietly(() => {
+                    if (source) {
+                        collector.decode(source, clock.now() - startedAt, "audio");
+                    }
+                });
+            };
+            return decodeAudio.apply(this, args).then(
+                value => {
+                    record();
+                    return value;
+                },
+                error => {
+                    record();
+                    throw error;
+                },
+            );
+        });
+        audioProto.decodeAudioData = patched;
+        teardowns.push(() => {
+            audioProto.decodeAudioData = originalDecodeAudio;
+        });
+    }
+
     const xhrProto = scope.XMLHttpRequest?.prototype;
     const originalOpen = xhrProto?.open;
     const originalSend = xhrProto?.send;
@@ -469,6 +513,11 @@ export function installNetworkProbes({ scope, collector }: FrameSamplerOptions):
                                 bytes: sizeOf(target.response) || undefined,
                                 failed: status !== 0 && status >= 400,
                             });
+                            if (typeof target.response === "object" && target.response !== null) {
+                                // Howler reads audio through XHR, so this is where a clip's bytes
+                                // get their address before `decodeAudioData` sees them.
+                                bufferOrigins.set(target.response as object, state.url);
+                            }
                         });
                     },
                     { once: true },

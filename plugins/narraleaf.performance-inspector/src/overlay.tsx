@@ -9,19 +9,43 @@
  * class existing. Inline styles are not a shortcut here, they are the only thing that is true in
  * every build.
  *
- * **It is drawn above the dialogue box.** The host's overlay layer sits above the engine's `Player`,
- * and there is no DOM position beneath the dialogue for it to take. So the heads-up display is
- * small, cornered and completely transparent to the pointer, and only the full panel - which
- * someone opened on purpose - covers anything.
+ * **It is drawn above everything, and that is a deliberate departure.** The host renders plugin
+ * overlays between the stage and the app surfaces, which is right for an overlay that belongs to the
+ * game - and wrong for a diagnostic one, which would vanish behind the pause menu, the save screen
+ * and every authored page. So the tree is portalled to the document body: the host still owns the
+ * React element (a plugin has no `react-dom/client` and cannot mount a second root), `createPortal`
+ * is exported to plugins for exactly this, and only where the DOM lands changes.
+ *
+ * Nothing is taken from the game by doing it. The heads-up display is small, cornered and completely
+ * transparent to the pointer, and only the full panel - which someone opened on purpose - covers
+ * anything or takes a click.
  */
 
 import { Fragment, useMemo, useState, useSyncExternalStore } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
+import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { RESOURCE_KINDS, type ResourceRecord } from "./collector";
 import type { Profiler } from "./profiler";
 import { formatBytes, formatMs } from "./report";
 import type { OverlayCorner } from "./settings";
 import type { OverlayStrings } from "./strings";
+
+/**
+ * Above every layer the game or the host can produce.
+ *
+ * A number this size is usually a smell, and here it is the requirement: this draws only after
+ * someone pressed a key asking to see it, and anything it ends up behind is a measurement they
+ * cannot read.
+ */
+const OVERLAY_Z_INDEX = 2147483000;
+
+const PORTAL_STYLE: CSSProperties = {
+    position: "fixed",
+    inset: 0,
+    zIndex: OVERLAY_Z_INDEX,
+    // The frame itself never takes a click; the panel inside it turns this back on for itself.
+    pointerEvents: "none",
+};
 
 const FONT_STACK = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const PANEL_BACKGROUND = "rgba(14, 16, 21, 0.92)";
@@ -66,22 +90,33 @@ type SparklineProps = {
 };
 
 /**
- * The frame history as a filled area, scaled so the reference line has a fixed place.
+ * A series over time, scaled to keep a steady line readable.
  *
- * Scaled against the worse of the reference and the data rather than against the data alone: a run
- * that is comfortably inside budget should look flat, and a chart that always fills its box makes
- * a smooth game and a stuttering one indistinguishable at a glance.
+ * Two decisions, both about what a chart is allowed to imply.
+ *
+ * **A series with a reference is scaled against it**, not against its own data: a run comfortably
+ * inside the frame budget should look flat, and a chart that always fills its box makes a smooth
+ * game and a stuttering one indistinguishable at a glance.
+ *
+ * **A series without one is scaled to its own range, with headroom at both ends.** A heap that has
+ * not moved would otherwise draw along the very top edge with half its stroke clipped, which reads
+ * as a broken chart rather than as a steady one.
  */
 function Sparkline({ values, width, height, reference }: SparklineProps) {
     if (values.length === 0) {
         return null;
     }
-    const ceiling = Math.max(reference ? reference * 2 : 0, ...values, 1);
+    const highest = Math.max(reference ? reference * 2 : 0, ...values, 1);
+    const lowest = reference ? 0 : Math.min(...values);
+    const span = Math.max(highest - lowest, highest * 0.08, 1);
+    const floor = lowest - span * 0.15;
+    const ceiling = highest + span * 0.15;
+    const project = (value: number): number => height - ((value - floor) / (ceiling - floor)) * height;
     const step = values.length > 1 ? width / (values.length - 1) : width;
     const points = values
-        .map((value, index) => `${(index * step).toFixed(1)},${(height - (value / ceiling) * height).toFixed(1)}`)
+        .map((value, index) => `${(index * step).toFixed(1)},${project(value).toFixed(1)}`)
         .join(" ");
-    const referenceY = reference ? height - (reference / ceiling) * height : null;
+    const referenceY = reference ? project(reference) : null;
     return (
         <svg width={width} height={height} style={{ display: "block" }} aria-hidden="true">
             <polyline points={points} fill="none" stroke={ACCENT} strokeWidth={1} />
@@ -154,9 +189,7 @@ type StatProps = {
 function Stat({ label, value, hint }: StatProps) {
     return (
         <div style={{ minWidth: 120 }}>
-            <div style={{ color: TEXT_DIM, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>
-                {label}
-            </div>
+            <div style={{ color: TEXT_DIM, fontSize: 10 }}>{label}</div>
             <div style={{ fontSize: 17, fontVariantNumeric: "tabular-nums" }}>{value}</div>
             {hint ? <div style={{ color: TEXT_DIM, fontSize: 10 }}>{hint}</div> : null}
         </div>
@@ -170,8 +203,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
                 style={{
                     color: TEXT_DIM,
                     fontSize: 10,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.8,
                     marginBottom: 8,
                     borderBottom: "1px solid rgba(255,255,255,0.08)",
                     paddingBottom: 4,
@@ -262,8 +293,6 @@ function AssetsTab({
                 padding: 0,
                 color: sort === key ? ACCENT : TEXT_DIM,
                 font: `500 10px/1.6 ${FONT_STACK}`,
-                textTransform: "uppercase",
-                letterSpacing: 0.6,
                 cursor: "pointer",
                 textAlign: "right",
             }}
@@ -306,18 +335,12 @@ function AssetsTab({
                         fontVariantNumeric: "tabular-nums",
                     }}
                 >
-                    <div style={{ color: TEXT_DIM, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>
-                        {strings.columnAsset}
-                    </div>
-                    <div style={{ color: TEXT_DIM, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, textAlign: "right" }}>
-                        {strings.columnKind}
-                    </div>
+                    <div style={{ color: TEXT_DIM, fontSize: 10 }}>{strings.columnAsset}</div>
+                    <div style={{ color: TEXT_DIM, fontSize: 10, textAlign: "right" }}>{strings.columnKind}</div>
                     {header(strings.columnRequests, "requests")}
                     {header(strings.columnBytes, "bytes")}
                     {header(strings.columnDecode, "decode")}
-                    <div style={{ color: TEXT_DIM, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, textAlign: "right" }}>
-                        {strings.columnHeld}
-                    </div>
+                    <div style={{ color: TEXT_DIM, fontSize: 10, textAlign: "right" }}>{strings.columnHeld}</div>
                     {rows.sorted.slice(0, MAX_ASSET_ROWS).map(record => (
                         <Fragment key={record.url}>
                             <div
@@ -343,7 +366,7 @@ function AssetsTab({
             )}
             {rows.total > MAX_ASSET_ROWS ? (
                 <div style={{ color: TEXT_DIM, fontSize: 10, marginTop: 8 }}>
-                    {`${rows.total - MAX_ASSET_ROWS} more rows are in the report, not shown here.`}
+                    {strings.moreRows(rows.total - MAX_ASSET_ROWS)}
                 </div>
             ) : null}
         </div>
@@ -359,6 +382,15 @@ export type PerformanceOverlayProps = {
     readStrings: () => OverlayStrings;
 };
 
+/** Puts a finished tree on top of the page. See the module comment for why it is not left in place. */
+function portalled(content: ReactElement | null): ReactElement | null {
+    if (!content) {
+        return null;
+    }
+    const frame = <div style={PORTAL_STYLE}>{content}</div>;
+    return typeof document === "undefined" ? frame : createPortal(frame, document.body);
+}
+
 export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlayProps) {
     useProfiler(profiler);
     const strings = readStrings();
@@ -369,7 +401,7 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
         return null;
     }
     if (view === "hud") {
-        return <Hud profiler={profiler} strings={strings} corner={profiler.settings.corner} />;
+        return portalled(<Hud profiler={profiler} strings={strings} corner={profiler.settings.corner} />);
     }
 
     const snapshot = profiler.snapshot();
@@ -384,7 +416,7 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
         { id: "timeline", label: strings.tabTimeline },
     ];
 
-    return (
+    return portalled(
         <div
             style={{
                 position: "fixed",
@@ -511,15 +543,15 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                                 <Stat
                                     label={strings.heldInMemory}
                                     value={formatBytes(snapshot.retained.bytes)}
-                                    hint={`${snapshot.retained.blobs} object URLs`}
+                                    hint={strings.objectUrlCount(snapshot.retained.blobs)}
                                 />
                             </StatRow>
                             <Section title={strings.assetsSummary}>
                                 <StatRow>
                                     <Stat
-                                        label={strings.assetsSummary}
+                                        label={strings.transferred}
                                         value={formatBytes(snapshot.resources.totals.bytes)}
-                                        hint={`${snapshot.resources.totals.addresses} addresses - ${snapshot.resources.totals.requests} requests`}
+                                        hint={`${strings.addressCount(snapshot.resources.totals.addresses)} - ${strings.requestCount(snapshot.resources.totals.requests)}`}
                                     />
                                     <Stat
                                         label={strings.repeatFetches}
@@ -570,7 +602,7 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                             <Section title={strings.framePercentiles}>
                                 <Sparkline values={frames.recentMs} width={880} height={90} reference={BUDGET_60_MS} />
                                 <div style={{ color: TEXT_DIM, fontSize: 10, marginTop: 4 }}>
-                                    {`${frames.recentMs.length} frames, dashed line at ${BUDGET_60_MS.toFixed(1)}ms`}
+                                    {`${strings.frameCount(frames.recentMs.length)} - ${strings.budgetLine(Number(BUDGET_60_MS.toFixed(1)))}`}
                                 </div>
                             </Section>
                             <Section title={strings.longTasks}>
@@ -586,7 +618,7 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                             </Section>
                             <Section title={strings.overhead}>
                                 <div style={{ color: TEXT_DIM }}>
-                                    {`${snapshot.overhead.averageMs}ms per frame over ${snapshot.overhead.frames} frames`}
+                                    {strings.overheadPerFrame(snapshot.overhead.averageMs, snapshot.overhead.frames)}
                                 </div>
                             </Section>
                         </div>
@@ -641,7 +673,7 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                                             </div>
                                         </Fragment>
                                     ))}
-                                    <div style={{ fontWeight: 600 }}>total</div>
+                                    <div style={{ fontWeight: 600 }}>{strings.total}</div>
                                     <div style={{ textAlign: "right", fontWeight: 600 }}>{snapshot.retained.blobs}</div>
                                     <div style={{ textAlign: "right", fontWeight: 600 }}>
                                         {formatBytes(snapshot.retained.bytes)}
@@ -693,9 +725,9 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                         }}
                     >
                         {snapshot.resources.droppedAddresses > 0
-                            ? `${snapshot.resources.droppedAddresses} addresses past the table's cap were not recorded. `
+                            ? `${strings.cappedAddresses(snapshot.resources.droppedAddresses)} `
                             : ""}
-                        {snapshot.droppedMarkers > 0 ? "Older timeline entries were dropped." : ""}
+                        {snapshot.droppedMarkers > 0 ? strings.droppedTimeline : ""}
                     </div>
                 ) : null}
             </div>

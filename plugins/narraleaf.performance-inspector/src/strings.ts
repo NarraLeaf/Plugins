@@ -72,6 +72,24 @@ export type OverlayStrings = {
     spans: string;
     openSpans: string;
     hotkeyHint: string;
+    transferred: string;
+    total: string;
+    /**
+     * Phrases that carry a count.
+     *
+     * Functions rather than templates with a placeholder, because English needs the noun to agree
+     * with the number and Chinese and Japanese need a measure word - two things one format string
+     * cannot do at once.
+     */
+    addressCount: (count: number) => string;
+    requestCount: (count: number) => string;
+    objectUrlCount: (count: number) => string;
+    frameCount: (count: number) => string;
+    moreRows: (count: number) => string;
+    overheadPerFrame: (ms: number, frames: number) => string;
+    cappedAddresses: (count: number) => string;
+    droppedTimeline: string;
+    budgetLine: (ms: number) => string;
 };
 
 const EN: OverlayStrings = {
@@ -136,6 +154,17 @@ const EN: OverlayStrings = {
     spans: "Spans",
     openSpans: "Still open",
     hotkeyHint: "Press again to hide, with Shift for the full panel.",
+    transferred: "Transferred",
+    total: "Total",
+    addressCount: count => `${count} ${count === 1 ? "address" : "addresses"}`,
+    requestCount: count => `${count} ${count === 1 ? "request" : "requests"}`,
+    objectUrlCount: count => `${count} object ${count === 1 ? "URL" : "URLs"}`,
+    frameCount: count => `${count} ${count === 1 ? "frame" : "frames"}`,
+    moreRows: count => `${count} more rows are in the report, not shown here.`,
+    overheadPerFrame: (ms, frames) => `${ms}ms per frame over ${frames} frames`,
+    cappedAddresses: count => `${count} addresses past the table's cap were not recorded.`,
+    droppedTimeline: "Older timeline entries were dropped.",
+    budgetLine: ms => `dashed line at ${ms}ms`,
 };
 
 const ZH: OverlayStrings = {
@@ -200,6 +229,17 @@ const ZH: OverlayStrings = {
     spans: "区间",
     openSpans: "尚未结束",
     hotkeyHint: "再按一次隐藏，按住 Shift 打开完整面板。",
+    transferred: "已传输",
+    total: "合计",
+    addressCount: count => `${count} 个地址`,
+    requestCount: count => `${count} 次请求`,
+    objectUrlCount: count => `${count} 个 object URL`,
+    frameCount: count => `${count} 帧`,
+    moreRows: count => `另有 ${count} 行只在报告里，此处未显示。`,
+    overheadPerFrame: (ms, frames) => `每帧 ${ms}ms，共 ${frames} 帧`,
+    cappedAddresses: count => `另有 ${count} 个地址超出表格上限，未被记录。`,
+    droppedTimeline: "较早的时间线条目已被丢弃。",
+    budgetLine: ms => `虚线为 ${ms}ms`,
 };
 
 const JA: OverlayStrings = {
@@ -264,6 +304,17 @@ const JA: OverlayStrings = {
     spans: "区間",
     openSpans: "未終了",
     hotkeyHint: "もう一度押すと閉じ、Shift 併用で詳細パネルを開きます。",
+    transferred: "転送量",
+    total: "合計",
+    addressCount: count => `${count} 件のアドレス`,
+    requestCount: count => `${count} 回の要求`,
+    objectUrlCount: count => `${count} 件の object URL`,
+    frameCount: count => `${count} フレーム`,
+    moreRows: count => `残り ${count} 行はレポートにのみ含まれます。`,
+    overheadPerFrame: (ms, frames) => `1 フレームあたり ${ms}ms、計 ${frames} フレーム`,
+    cappedAddresses: count => `上限を超えた ${count} 件のアドレスは記録されていません。`,
+    droppedTimeline: "古いタイムライン項目は破棄されました。",
+    budgetLine: ms => `破線は ${ms}ms`,
 };
 
 /** Resolved by primary subtag, so `zh-Hans-CN` and `zh-TW` both land on the Chinese table. */

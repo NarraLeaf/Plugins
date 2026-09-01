@@ -88,6 +88,8 @@ export type PerformanceReport = {
     retained: CollectorSnapshot["retained"];
     timeline: CollectorSnapshot["markers"];
     droppedMarkers: number;
+    /** Which scene each timeline number refers to. See `SceneRecord`. */
+    scenes: CollectorSnapshot["scenes"];
     spans: CollectorSnapshot["spans"];
     openSpans: string[];
     counters: CollectorSnapshot["counters"];
@@ -207,6 +209,7 @@ export function buildReport(input: BuildReportInput): PerformanceReport {
         retained: snapshot.retained,
         timeline: snapshot.markers,
         droppedMarkers: snapshot.droppedMarkers,
+        scenes: snapshot.scenes,
         spans: snapshot.spans,
         openSpans: snapshot.openSpans,
         counters: snapshot.counters,
@@ -335,7 +338,7 @@ export function formatReportText(report: PerformanceReport): string {
         push(`  ${formatBytes(report.resources.repeatBytes)} of that was addresses fetched more than once`);
     }
     if (report.resources.decodeMs > 0) {
-        push(`  ${formatMs(report.resources.decodeMs)} spent decoding images`);
+        push(`  ${formatMs(report.resources.decodeMs)} spent decoding`);
     }
     if (report.resources.failed > 0) {
         push(`  ${report.resources.failed} requests failed`);

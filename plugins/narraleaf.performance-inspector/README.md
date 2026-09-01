@@ -16,13 +16,13 @@ The **Performance** panel on the right rail holds every setting.
 
 | Setting | Default | What it does |
 |---|---|---|
-| Where the overlay can be opened | Dev Mode only | `Dev Mode and every build` also arms previews and built games. |
+| Overlay availability | Dev Mode only | `Dev Mode and every build` also arms previews and built games. |
 | Overlay hotkey | `F3` | Any key, on its own or after `Ctrl`, `Alt`, `Shift`, `Meta`. |
-| Overlay shown when the game starts | Nothing | Start a run with the display already up. |
-| Corner for the compact display | Top left | |
+| Overlay at game start | Nothing | Start a run with the display already up. |
+| Compact display corner | Top left | |
 | Measure asset loading | On | Sizes, request counts, decode time and retention. |
-| Frame history kept | 60 s | How far the chart and the percentiles reach back. |
-| Write captured reports to the game log | On | |
+| Frame history | 60 s | How far the chart and the percentiles reach back. |
+| Reports in the game log | On | |
 
 **Availability is the setting to be deliberate about.** Left alone, the profiler
 arms only in Dev Mode: nothing you build can show a player an overlay, whatever
@@ -38,10 +38,16 @@ them apart; offering the choice would promise a distinction that is not there.
 
 `F3` shows the compact display. `Shift+F3` opens the full panel; `Esc` closes it.
 
-The compact display is transparent to the pointer and stays out of the way. The
-full panel takes the pointer while it is up, and both draw above the dialogue box
-— the host's overlay layer sits above the engine's player and there is no
-position beneath the dialogue for it to take.
+The compact display is transparent to the pointer and stays out of the way; the
+full panel takes the pointer while it is up.
+
+Both draw above everything, including the dialogue box and the app surfaces — the
+pause menu, the save screen, any authored page. Studio renders plugin overlays
+between the stage and those surfaces, which is right for an overlay belonging to
+the game and wrong for a diagnostic one that would then vanish behind the first
+menu the player opened, so this one is portalled to the top. Nothing else changes:
+the host still owns the element, and the compact display still lets every click
+through to whatever is under it.
 
 **Overview** — frame rate, frame-time percentiles, heap, what is held in memory,
 what has been loaded, and the playthrough counters.
@@ -101,7 +107,7 @@ overrides the inspector field, so a loop can name what it is measuring.
 The frame rate comes from the animation frame callback; long tasks and the
 browser's own resource timing come from performance observers. With **Measure
 asset loading** on, the plugin also wraps `fetch`, `XMLHttpRequest`, the two
-response body readers, the object-URL factory and image decoding.
+response body readers, the object-URL factory, and both image and audio decoding.
 
 Those wrappers always delegate first and record second, restore exactly what they
 replaced, and never make a request of their own or hold a reference to a response
@@ -110,7 +116,10 @@ failed asset load.
 
 **Retention is measured through object URLs.** The engine keeps a picture alive
 by keeping its object URL alive, so a URL created and never revoked is a payload
-the process is still holding. That is what the memory page counts.
+the process is still holding. That is what the memory page counts — and it is
+images and video, not audio: a clip read through XHR and handed to
+`decodeAudioData` becomes an audio buffer, which nothing in a page can measure.
+Audio still appears in the asset table with its bytes and its decode time.
 
 The profiler reports its own per-frame cost on the Frames page, because the first
 question anyone asks a profiler is whether the numbers include the profiler.
@@ -136,7 +145,12 @@ never appears.
 
 **A protected build shows opaque addresses.** Asset protection resolves by
 derived id, so the address a profiled run reports is that id rather than a
-filename. The sizes, counts and retention are unaffected.
+filename — and so does Dev Mode, which serves assets from a grant token as
+`application/octet-stream`. The sizes, counts and retention are unaffected, and
+the kind is recovered from the decode: only an image element decodes an image
+and only an audio context decodes audio, so anything that was decoded is
+classified even when its address names nothing. An asset that was fetched and
+never decoded stays `other`.
 
 **Byte counts need the wrappers.** With **Measure asset loading** off, the only
 source left is resource timing, which reports zero bytes for a response served

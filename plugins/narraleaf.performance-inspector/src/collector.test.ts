@@ -201,6 +201,36 @@ describe("retention", () => {
         collector.decode("blob:1", 120);
         expect(collector.snapshot().resources.records[0].decodeMs).toBe(120);
     });
+
+    it("lets a decode name the kind of an address that named nothing", () => {
+        const { collector } = makeCollector();
+        // What a Dev Mode grant token and a protected build's derived id both look like: no
+        // extension, and served as application/octet-stream.
+        collector.request({ url: "app://fs/oJMY3xyBZdS", durationMs: 5, bytes: 5000 });
+        expect(collector.snapshot().resources.records[0].kind).toBe("other");
+
+        collector.retain("blob:1", "app://fs/oJMY3xyBZdS", 5000);
+        collector.decode("blob:1", 40);
+        const snapshot = collector.snapshot();
+        expect(snapshot.resources.records[0].kind).toBe("image");
+        // The retained breakdown is grouped by kind, so it has to learn it too.
+        expect(snapshot.retained.byKind.image.bytes).toBe(5000);
+        expect(snapshot.retained.byKind.other.bytes).toBe(0);
+    });
+
+    it("takes an audio decode as proof of an audio asset", () => {
+        const { collector } = makeCollector();
+        collector.request({ url: "app://fs/D2FYb1Z3Nd0", durationMs: 5, bytes: 700_000 });
+        collector.decode("app://fs/D2FYb1Z3Nd0", 18, "audio");
+        expect(collector.snapshot().resources.records[0].kind).toBe("audio");
+    });
+
+    it("does not let a decode overrule a kind the address already stated", () => {
+        const { collector } = makeCollector();
+        collector.request({ url: "theme.ogg", durationMs: 5, bytes: 700 });
+        collector.decode("theme.ogg", 18);
+        expect(collector.snapshot().resources.records[0].kind).toBe("audio");
+    });
 });
 
 describe("marks and spans", () => {
@@ -235,6 +265,34 @@ describe("marks and spans", () => {
         expect(snapshot.markers).toHaveLength(3);
         expect(snapshot.markers[2].label).toBe("mark 5");
         expect(snapshot.droppedMarkers).toBeGreaterThan(0);
+    });
+});
+
+describe("scene numbering", () => {
+    it("numbers a scene once, in the order it was first entered", () => {
+        const { collector } = makeCollector();
+        expect(collector.sceneOrdinal("scene-a")).toBe(1);
+        expect(collector.sceneOrdinal("scene-b")).toBe(2);
+        expect(collector.sceneOrdinal("scene-a")).toBe(1);
+        expect(collector.snapshot().scenes).toEqual([
+            { ordinal: 1, id: "scene-a" },
+            { ordinal: 2, id: "scene-b" },
+        ]);
+    });
+
+    it("has no number for a scene the host could not name", () => {
+        const { collector } = makeCollector();
+        expect(collector.sceneOrdinal(null)).toBeNull();
+        expect(collector.sceneOrdinal("")).toBeNull();
+        expect(collector.snapshot().scenes).toEqual([]);
+    });
+
+    it("keeps the numbering across a reset, so two reports of one run agree", () => {
+        const { collector } = makeCollector();
+        collector.sceneOrdinal("scene-a");
+        collector.sceneOrdinal("scene-b");
+        collector.reset(1);
+        expect(collector.sceneOrdinal("scene-b")).toBe(2);
     });
 });
 

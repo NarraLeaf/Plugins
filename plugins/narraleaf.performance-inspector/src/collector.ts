@@ -160,6 +160,19 @@ export type TimelineMarker = {
     detail?: string;
 };
 
+/**
+ * A scene the run reached, numbered in the order it was first entered.
+ *
+ * The number is what the timeline shows and the id is what this record keeps, because the engine
+ * names a scene with a UUID and a UUID on a surface someone reads is not information - Studio's
+ * own rule is that its interface never shows one. A report is read by tools as well as by people,
+ * so the id stays here where a tool can use it to find the scene in the project.
+ */
+export type SceneRecord = {
+    ordinal: number;
+    id: string;
+};
+
 export type SpanRecord = {
     name: string;
     startAt: number;
@@ -248,6 +261,7 @@ export type CollectorSnapshot = {
     retained: RetainedTotals;
     markers: TimelineMarker[];
     droppedMarkers: number;
+    scenes: SceneRecord[];
     spans: SpanRecord[];
     openSpans: string[];
     counters: CollectorCounters;
@@ -414,6 +428,7 @@ export class PerformanceCollector {
 
     private markers: TimelineMarker[] = [];
     private droppedMarkers = 0;
+    private readonly sceneOrdinals = new Map<string, number>();
     private readonly openSpans = new Map<string, number>();
     private spans: SpanRecord[] = [];
 
@@ -679,7 +694,18 @@ export class PerformanceCollector {
         this.settle(record);
     }
 
-    public decode(url: string, durationMs: number): void {
+    /**
+     * Time spent decoding a payload, and - for an address whose kind is still unknown - what that
+     * decode says it was.
+     *
+     * The inference is the only thing that classifies an asset in the two environments that matter
+     * most. Studio serves Dev Mode assets as `application/octet-stream` from a grant token with no
+     * extension, and a protected build serves them from a derived id; in both, the address names
+     * nothing. But only an image element decodes an image and only an audio context decodes audio,
+     * so the decode itself is proof of kind - and "190MB of images, 10MB of audio" is a different
+     * report from "200MB of other".
+     */
+    public decode(url: string, durationMs: number, kind: ResourceKind = "image"): void {
         if (!Number.isFinite(durationMs) || durationMs < 0) {
             return;
         }
@@ -687,6 +713,14 @@ export class PerformanceCollector {
         const record = this.resources.get(url) ?? (source ? this.resources.get(source) : undefined);
         if (!record) {
             return;
+        }
+        if (record.kind === "other") {
+            record.kind = kind;
+            const held = source ? this.liveObjectUrls.get(url) : undefined;
+            if (held) {
+                // The retained totals are grouped by kind, so the live entry has to learn it too.
+                held.kind = kind;
+            }
         }
         record.decodes += 1;
         record.decodeMs += durationMs;
@@ -748,6 +782,25 @@ export class PerformanceCollector {
             this.markers = this.markers.slice(this.markers.length - this.options.maxMarkers);
             this.droppedMarkers += 1;
         }
+    }
+
+    /**
+     * The number this scene is known by, assigned on first sight and stable afterwards.
+     *
+     * A scene with no id - a story compiled outside Studio, or a mount the host could not name -
+     * gets no number, and the caller says "scene enter" with nothing after it rather than "scene 0".
+     */
+    public sceneOrdinal(sceneId: string | null | undefined): number | null {
+        if (!sceneId) {
+            return null;
+        }
+        const existing = this.sceneOrdinals.get(sceneId);
+        if (existing !== undefined) {
+            return existing;
+        }
+        const ordinal = this.sceneOrdinals.size + 1;
+        this.sceneOrdinals.set(sceneId, ordinal);
+        return ordinal;
     }
 
     public beginSpan(name: string): void {
@@ -813,6 +866,8 @@ export class PerformanceCollector {
         this.droppedAddressNames.clear();
         this.markers = [];
         this.droppedMarkers = 0;
+        // The scene numbering is deliberately kept: a reset starts a new window over the same
+        // playthrough, and renumbering mid-run would make two reports of one session disagree.
         this.openSpans.clear();
         this.spans = [];
         this.counters = {
@@ -955,6 +1010,7 @@ export class PerformanceCollector {
             retained: this.retainedTotals(),
             markers: [...this.markers],
             droppedMarkers: this.droppedMarkers,
+            scenes: [...this.sceneOrdinals.entries()].map(([id, ordinal]) => ({ ordinal, id })),
             spans: [...this.spans],
             openSpans: [...this.openSpans.keys()],
             counters: { ...this.counters },
