@@ -310,6 +310,13 @@ fn dispatch(method: &str, params: &Value, session: &mut Session) -> Result<Value
             active.reset_all(also)?;
             true
         }
+        "dlc.owned" => {
+            // A read, so it answers rather than reporting a write. Nothing is touched and nothing
+            // is flushed: asking whether a player owns something must not schedule a StoreStats.
+            let app_id = number_param(params, "appId")?;
+            let owned = app_id >= 0.0 && active.owns_dlc(app_id as u32);
+            return Ok(json!({ "owned": owned }));
+        }
         "stats.store" => {
             // Explicit flush, for callers that need the toast now. Nothing in
             // the plugin calls it today — the debounce and the shutdown flush

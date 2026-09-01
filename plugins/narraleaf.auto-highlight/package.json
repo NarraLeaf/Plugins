@@ -1,0 +1,39 @@
+{
+  "name": "@narraleaf-plugins/auto-highlight",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Highlights the speaker and dims everyone else, at compile time.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "keywords": [
+    "narraleaf",
+    "narraleaf-studio-plugin",
+    "story",
+    "highlight"
+  ],
+  "packageManager": "yarn@4.10.3",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --dev",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "narraleaf-studio": "^0.5.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.0"
+  },
+  "narraleaf": {
+    "categories": [
+      "story"
+    ],
+    "studioVersion": ">=0.6.0",
+    "locales": {
+      "zh-CN": {
+        "name": "自动高亮",
+        "description": "编译时自动高亮说话的角色、压暗其他人。新增启用/停用与手动高亮的故事动作。"
+      }
+    }
+  }
+}

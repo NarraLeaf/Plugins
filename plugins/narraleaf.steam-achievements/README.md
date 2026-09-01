@@ -17,7 +17,7 @@ via the language switcher, and inline validation: API-name shape and uniqueness,
 progress achievements pointing at a stat that exists, and missing text in any
 language you have declared.
 
-**Nine blueprint nodes**, all under the `Steam` category:
+**Ten blueprint nodes**, all under the `Steam` category:
 
 | Node | Local mirror | Steam |
 |---|---|---|
@@ -28,7 +28,31 @@ language you have declared.
 | Get Stat | **reads the mirror** | — |
 | Steam Available | — | `SteamAPI_Init` succeeded |
 | Steam Language | — | `GetCurrentGameLanguage` |
+| Open Store Page | — | store page in the client, else in the browser |
+| Owns DLC | — | `BIsDlcInstalled` |
 | Reset All Stats | clears the mirror | `ResetAllStats` |
+
+`Open Store Page` leaves by `Failed` with a sentence on `Error` whenever the page
+cannot be handed over — no App ID for this build, an App ID that is not a number,
+or an environment with nowhere to send the player (the editor, or a Studio older
+than the plugin's address permission). It never throws: a store link is not worth
+taking a running game down for. Leave its App ID blank for this build's own page,
+or fill in a DLC's to send the player there instead.
+
+## Owns DLC is for offering a purchase, never for gating content
+
+`Owns DLC` answers whether this account owns the DLC with that Steam App ID. Use
+it to decide whether to draw a purchase button — showing "buy the extra chapter"
+to somebody who already bought it is the fault it fixes.
+
+**Do not gate content on it.** Whether the content is *available* is Studio's own
+`Is DLC Installed`, which reads the files beside the game. Steam can only be asked
+when it is running and reachable, so a graph that gated content on this node would
+take an offline player's bought chapter away from them.
+
+That is also why an unreachable Steam answers `Not Owned` rather than failing: the
+worst that does is offer a purchase to somebody who already made one, and the store
+page they land on says so. The other direction would hide what they paid for.
 
 Every node also takes an optional wired id pin that overrides the inspector's
 picker, so a graph can walk a list — an in-game achievement gallery, a debug
@@ -51,6 +75,18 @@ author would find it, and the plugin's runtime API has no filesystem anyway.
 When Steam launched the game it has already set `SteamAppId`, and *that* wins:
 it describes the app actually running. A disagreement with the catalog is logged
 rather than acted on.
+
+**The store link uses a second App ID, stated per build variant.** A demo is a
+separate Steam app from the game it demos, and the catalog holds one App ID for
+the whole project — so `contributes.buildConfig` declares an `appId` field with
+`scope: "variant"`, filled in on the build dialog's Plugins page. `Open Store
+Page` prefers it and reads the catalog's only when the variant states nothing;
+that fallback names the same app the Steam connection is opened with, and it is
+the only App ID that exists in Dev Mode, where builds have not happened yet.
+
+The Steam connection itself still uses the catalog's App ID. Pointing it at the
+variant's would change which Steam app a demo's achievements land in, which is a
+decision to make deliberately rather than inherit from a store link.
 
 ## Which platforms reach Steam
 
@@ -76,6 +112,15 @@ gated domain the plugin touches — no `state`, no `saves`, no `events`, no
 `app.game.sidecar` has no capability of its own: declaring
 `contributes.sidecars` *is* the request, and the install prompt names the
 binaries and platforms.
+
+`app.game.navigation` works the same way: declaring `contributes.externalLinks`
+is the request, and the prompt lists the two patterns by name —
+`https://store.steampowered.com/app/*` and `steam://store/*`. The second is not
+`steam://*` on purpose. That would also cover `steam://run/<id>`,
+`steam://install/<id>` and `steam://uninstall/<id>`, and no prompt could honestly
+describe "launch, install and uninstall arbitrary Steam apps" as opening a store
+page. Whichever address is asked for, Studio decides it against these patterns in
+the process that performs the act — declaring is not deciding.
 
 The Steam shared library (`steam_api64.dll` and its POSIX equivalents) ships
 inside the package, beside the executable that links against it. It is not
