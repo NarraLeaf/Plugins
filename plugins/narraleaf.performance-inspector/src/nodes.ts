@@ -1,10 +1,14 @@
 /**
  * The blueprint nodes, defined once and registered by both entries.
  *
- * They exist so the profiler is not only a thing someone presses a key for. A story can open the
- * display at the start of a chapter, bracket a scene it suspects, and read the frame rate back to
- * decide whether to run the expensive version of an effect - and all of that has to work in the
- * shipped build, which is the only build whose numbers are the real ones.
+ * They are the *only* way the profiler is turned on and shown. The plugin binds no keys: an author
+ * who wants a chord puts an `On Key Down` head in the game's global blueprint - it takes any binding
+ * the project's own input vocabulary can spell - and wires it here. A plugin claiming a key in
+ * someone else's game, ahead of that game's own input routing, is not the plugin's call to make.
+ *
+ * So a story can start measuring at the top of a chapter, open the display, bracket a scene it
+ * suspects, and read the frame rate back to decide whether to run the expensive version of an
+ * effect - all of it in the shipped build, which is the only build whose numbers are the real ones.
  *
  * The bridge argument is why this module imports neither the profiler nor React: the editor
  * registers the same definitions to get their palette entries and inspector shape, and in the editor
@@ -35,6 +39,10 @@ const execNext = { id: "next", kind: "output", semantic: "exec", label: "Next" }
  * from importing an overlay it will never draw.
  */
 export type NodeBridge = {
+    /** Arm the probes and measure from here. Throws away whatever window was already open. */
+    startProfiling(): void;
+    /** Take the probes back out. What was collected stays readable. */
+    stopProfiling(): void;
     setView(view: OverlayView): void;
     mark(label: string): void;
     beginSpan(name: string): void;
@@ -43,18 +51,18 @@ export type NodeBridge = {
     /** Null where no profiler is running, which is every execution inside the editor. */
     quick(): QuickStats | null;
     capture(): { summary: string; json: string } | null;
-    reset(): void;
 };
 
 /** The bridge the editor registers with: every node still runs, and nothing happens. */
 export const inertBridge: NodeBridge = {
+    startProfiling: () => undefined,
+    stopProfiling: () => undefined,
     setView: () => undefined,
     mark: () => undefined,
     beginSpan: () => undefined,
     endSpan: () => null,
     quick: () => null,
     capture: () => null,
-    reset: () => undefined,
 };
 
 type ExecuteCtx = PluginBlueprintNodeContext;
@@ -100,6 +108,36 @@ const NO_STATS = {
 
 export function createPerformanceNodes(bridge: NodeBridge): PluginBlueprintNodeDef[] {
     return [
+        {
+            type: `${PLUGIN_ID}.startProfiling`,
+            displayName: "Start Profiling",
+            category: CATEGORY,
+            keywords: ["performance", "profile", "start", "begin", "measure", "record"],
+            graphKinds: ["event", "macro"],
+            isPure: false,
+            pins: [execIn, execNext],
+            // Also the way to bound a measurement: run it at the top of the chapter you suspect and
+            // everything before it is dropped, so the report describes that chapter and not the run.
+            execute: () => {
+                bridge.startProfiling();
+                return { nextPort: "next" };
+            },
+        },
+        {
+            type: `${PLUGIN_ID}.stopProfiling`,
+            displayName: "Stop Profiling",
+            category: CATEGORY,
+            keywords: ["performance", "profile", "stop", "end", "pause"],
+            graphKinds: ["event", "macro"],
+            isPure: false,
+            pins: [execIn, execNext],
+            // The probes come out and the game is untouched again. What was measured stays readable,
+            // because someone who stopped a profile stopped it in order to read the result.
+            execute: () => {
+                bridge.stopProfiling();
+                return { nextPort: "next" };
+            },
+        },
         {
             type: `${PLUGIN_ID}.setOverlay`,
             displayName: "Set Performance Overlay",
@@ -283,22 +321,6 @@ export function createPerformanceNodes(bridge: NodeBridge): PluginBlueprintNodeD
                         json: captured?.json ?? "",
                     },
                 };
-            },
-        },
-        {
-            type: `${PLUGIN_ID}.reset`,
-            displayName: "Reset Performance Session",
-            category: CATEGORY,
-            keywords: ["performance", "reset", "clear", "profiler"],
-            graphKinds: ["event", "macro"],
-            isPure: false,
-            pins: [execIn, execNext],
-            // For measuring one chapter rather than one process: everything measured so far is
-            // dropped, and what the game is still holding in memory is kept, because that is the
-            // state the next window starts from.
-            execute: () => {
-                bridge.reset();
-                return { nextPort: "next" };
             },
         },
     ];

@@ -171,9 +171,11 @@ function Hud({ profiler, strings, corner }: HudProps) {
             {stats.heapSupported ? cell(strings.hudHeap, formatBytes(stats.heapUsedBytes)) : null}
             {cell(strings.hudHeld, `${stats.retainedBlobs} / ${formatBytes(stats.retainedBytes)}`)}
             {cell(strings.hudLoaded, `${stats.addresses} / ${formatBytes(stats.bytes)}`)}
-            <div style={{ marginTop: 4, color: TEXT_DIM, fontSize: 10, whiteSpace: "nowrap" }}>
-                {strings.hotkeyHint}
-            </div>
+            {profiler.isRunning() ? null : (
+                <div style={{ marginTop: 4, color: WARN, fontSize: 10, whiteSpace: "nowrap" }}>
+                    {strings.notMeasuring}
+                </div>
+            )}
         </div>
     );
 }
@@ -462,6 +464,9 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                     <div style={{ color: TEXT_DIM, fontSize: 11 }}>
                         {`${strings.sessionLength} ${formatMs(snapshot.elapsedMs)}`}
                     </div>
+                    {profiler.isRunning() ? null : (
+                        <div style={{ color: WARN, fontSize: 11 }}>{strings.notMeasuring}</div>
+                    )}
                     <div style={{ flex: 1 }} />
                     <ToolbarButton
                         label={strings.copySummary}

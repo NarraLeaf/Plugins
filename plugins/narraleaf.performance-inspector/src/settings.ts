@@ -36,6 +36,19 @@ export const SETTINGS_VERSION = 1;
  */
 export type OverlayAvailability = "studio" | "everywhere";
 
+/**
+ * When the probes go in.
+ *
+ * `gameStart` is the default because startup is one of the things most worth measuring - the asset
+ * storm at boot, the wait before the first line - and none of it exists to be measured if collection
+ * begins later. `graph` leaves the game untouched until a `Start Profiling` node runs, which is what
+ * a bounded measurement ("this chapter, not the whole session") needs and what a shipped build that
+ * carries the plugin but should cost nothing wants.
+ */
+export type CollectionStart = "gameStart" | "graph";
+
+export const COLLECTION_STARTS: readonly CollectionStart[] = ["gameStart", "graph"];
+
 /** What the overlay is showing. Also what the `Set Performance Overlay` node writes. */
 export type OverlayView = "hidden" | "hud" | "inspector";
 
@@ -57,9 +70,15 @@ export const HISTORY_SECONDS_CHOICES: readonly number[] = [30, 60, 300];
 export type InspectorSettings = {
     version: number;
     availability: OverlayAvailability;
-    /** A chord such as `F3` or `Ctrl+Shift+P`; see `hotkey.ts` for the grammar. */
-    hotkey: string;
-    /** What the overlay shows the moment the game starts, before anyone presses anything. */
+    collectFrom: CollectionStart;
+    /**
+     * What the overlay shows the moment the game starts.
+     *
+     * The plugin binds no keys of its own - opening the overlay is a `Set Performance Overlay` node,
+     * which the author reaches from an `On Key Down` head bound to whatever chord they want, from a
+     * button, or from a story row. So this setting is the one way to have it up from the first frame
+     * without wiring anything.
+     */
     openAt: OverlayView;
     historySeconds: number;
     corner: OverlayCorner;
@@ -81,7 +100,7 @@ export type InspectorSettings = {
 export const DEFAULT_SETTINGS: InspectorSettings = {
     version: SETTINGS_VERSION,
     availability: "studio",
-    hotkey: "F3",
+    collectFrom: "gameStart",
     openAt: "hidden",
     historySeconds: 60,
     corner: "top-left",
@@ -117,14 +136,10 @@ export function normalizeSettings(raw: unknown): InspectorSettings {
         )
         : DEFAULT_SETTINGS.historySeconds;
 
-    const hotkey = typeof raw.hotkey === "string" && raw.hotkey.trim()
-        ? raw.hotkey.trim()
-        : DEFAULT_SETTINGS.hotkey;
-
     return {
         version: SETTINGS_VERSION,
         availability: pick(raw.availability, ["studio", "everywhere"], DEFAULT_SETTINGS.availability),
-        hotkey,
+        collectFrom: pick(raw.collectFrom, COLLECTION_STARTS, DEFAULT_SETTINGS.collectFrom),
         openAt: pick(raw.openAt, OVERLAY_VIEWS, DEFAULT_SETTINGS.openAt),
         historySeconds,
         corner: pick(raw.corner, OVERLAY_CORNERS, DEFAULT_SETTINGS.corner),

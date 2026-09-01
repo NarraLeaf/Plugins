@@ -10,52 +10,30 @@
  * inert bridge - because a graph that calls `Mark Performance Event` must not break in the build
  * where measuring is off.
  *
- * **What one keystroke means.** The configured chord shows the compact display; the same chord with
- * Shift opens the full panel. The listener stands down while the player is typing and while an input
- * method is composing, which is the same rule the game's own keys follow.
+ * **When to start measuring.** `gameStart` puts the probes in during `setup`, which is the only way
+ * the boot is measurable at all; `graph` leaves the game untouched until a `Start Profiling` node
+ * runs. Either way the plugin binds no keys and opens nothing by itself - showing the overlay is a
+ * node, and an author who wants a chord binds one with an `On Key Down` head in their own global
+ * blueprint. A plugin that claimed a key would be claiming it in someone else's game, ahead of that
+ * game's own input routing.
  */
 
 import { defineRuntimePlugin, type RuntimePluginEventMap } from "narraleaf-studio/runtime";
 import { isStudioHostedGame, type EnvironmentScope } from "./environment";
-import { chordHasShiftVariant, matchesChord, parseChord, type Chord } from "./hotkey";
 import { createPerformanceNodes, inertBridge, type NodeBridge } from "./nodes";
 import { PerformanceOverlay } from "./overlay";
 import type { ProbeScope } from "./probes";
 import { Profiler, type ProfilerHost } from "./profiler";
 import { formatReportJson, formatReportText } from "./report";
-import { DEFAULT_SETTINGS, normalizeSettings, SETTINGS_NAMESPACE } from "./settings";
+import { normalizeSettings, SETTINGS_NAMESPACE } from "./settings";
 import { stringsFor } from "./strings";
 
 /** Kept in step with manifest.json; it is stamped into every report. */
 const PLUGIN_VERSION = "0.1.0";
 
 type BrowserScope = ProbeScope & EnvironmentScope & {
-    addEventListener?: (type: string, listener: (event: KeyboardEvent) => void, options?: unknown) => void;
-    removeEventListener?: (type: string, listener: (event: KeyboardEvent) => void, options?: unknown) => void;
     navigator?: { clipboard?: { writeText?: (text: string) => Promise<void> } };
 };
-
-/**
- * Whether a keystroke belongs to something the player is typing into.
- *
- * The same guard the game's own keys use. Without it the profiler's chord fires inside a name-entry
- * field, and with an input method open every keystroke arrives twice - once as composition and once
- * as the committed key - so `isComposing` has to be honoured rather than assumed absent.
- */
-function isTypingTarget(event: KeyboardEvent): boolean {
-    if (event.isComposing || event.keyCode === 229) {
-        return true;
-    }
-    const target = event.target as { tagName?: string; isContentEditable?: boolean } | null;
-    if (!target) {
-        return false;
-    }
-    if (target.isContentEditable) {
-        return true;
-    }
-    const tag = typeof target.tagName === "string" ? target.tagName.toUpperCase() : "";
-    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-}
 
 function shortened(text: string, limit = 48): string {
     const trimmed = text.trim();
@@ -106,9 +84,13 @@ export default defineRuntimePlugin({
             now: () => (scope.performance ? scope.performance.now() : 0),
             epochNow: () => Date.now(),
         });
-        profiler.start();
+        if (settings.collectFrom === "gameStart") {
+            profiler.start();
+        }
 
         const bridge: NodeBridge = {
+            startProfiling: () => profiler.startFresh(),
+            stopProfiling: () => profiler.stop(),
             setView: view => profiler.setView(view),
             mark: label => profiler.mark("author", label),
             beginSpan: name => profiler.beginSpan(name),
@@ -118,7 +100,6 @@ export default defineRuntimePlugin({
                 const report = profiler.capture();
                 return { summary: formatReportText(report), json: formatReportJson(report) };
             },
-            reset: () => profiler.reset(),
         };
         app.game.blueprintNodes.registerMany(createPerformanceNodes(bridge));
 
@@ -132,36 +113,6 @@ export default defineRuntimePlugin({
         } else {
             app.game.log("warning", "Performance Inspector could not draw its overlay in this environment.");
         }
-
-        const chord: Chord = parseChord(settings.hotkey) ?? parseChord(DEFAULT_SETTINGS.hotkey)!;
-        const canShift = chordHasShiftVariant(chord);
-        const onKeyDown = (event: KeyboardEvent): void => {
-            if (isTypingTarget(event)) {
-                return;
-            }
-            if (canShift && matchesChord(chord, event, true)) {
-                event.preventDefault();
-                event.stopPropagation();
-                profiler.toggleInspector();
-                return;
-            }
-            if (matchesChord(chord, event)) {
-                event.preventDefault();
-                event.stopPropagation();
-                profiler.toggleHud();
-                return;
-            }
-            if (event.key === "Escape" && profiler.getView() === "inspector") {
-                // Only while the panel is up, and consumed so the same press does not also open the
-                // game's own menu behind it.
-                event.preventDefault();
-                event.stopPropagation();
-                profiler.setView("hidden");
-            }
-        };
-        // Capture phase: the game binds the same keys on the window, and a profiler that only sees
-        // what the game did not want is not much of a profiler.
-        scope.addEventListener?.("keydown", onKeyDown, true);
 
         const events = app.game.events;
         if (!events) {

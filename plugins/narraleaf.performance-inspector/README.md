@@ -1,9 +1,14 @@
 # Performance Inspector
 
-A profiler that runs inside the game rather than beside it. A hotkey brings up a
-heads-up display and a full panel: frame rate and hitches, the JavaScript heap,
-long tasks, every asset the run has fetched with its bytes and decode time, and
-how much of that the process is still holding in memory.
+A profiler that runs inside the game rather than beside it: frame rate and
+hitches, the JavaScript heap, long tasks, every asset the run has fetched with its
+bytes and decode time, and how much of that the process is still holding in memory.
+
+**It binds no keys.** Blueprint nodes start it and open its overlay, and if you
+want a key you bind one yourself — an `On Key Down` head in the game's global
+blueprint takes any chord your project's input vocabulary can spell. A plugin
+claiming a key in someone else's game, ahead of that game's own input routing, is
+not the plugin's call to make.
 
 It works in a **built** game, which is the point. A Dev Mode measurement is taken
 against a development React and a development bundle, so it answers a different
@@ -17,8 +22,8 @@ The **Performance** panel on the right rail holds every setting.
 | Setting | Default | What it does |
 |---|---|---|
 | Overlay availability | Dev Mode only | `Dev Mode and every build` also arms previews and built games. |
-| Overlay hotkey | `F3` | Any key, on its own or after `Ctrl`, `Alt`, `Shift`, `Meta`. |
-| Overlay at game start | Nothing | Start a run with the display already up. |
+| Start measuring | At game start | `When a graph says so` leaves the game untouched until `Start Profiling` runs. |
+| Overlay at game start | Nothing | Start a run with the display already up, without wiring anything. |
 | Compact display corner | Top left | |
 | Measure asset loading | On | Sizes, request counts, decode time and retention. |
 | Frame history | 60 s | How far the chart and the percentiles reach back. |
@@ -26,7 +31,7 @@ The **Performance** panel on the right rail holds every setting.
 
 **Availability is the setting to be deliberate about.** Left alone, the profiler
 arms only in Dev Mode: nothing you build can show a player an overlay, whatever
-they press. Setting it to every build ships the overlay with the game, so turn it
+they press. Setting it to every build makes the nodes live in the game, so turn it
 back before the release build — or keep the profiling build as a separate
 variant.
 
@@ -36,7 +41,22 @@ them apart; offering the choice would promise a distinction that is not there.
 
 ## In the game
 
-`F3` shows the compact display. `Shift+F3` opens the full panel; `Esc` closes it.
+**Opening it is a node.** `Set Performance Overlay` takes `Hidden`, `Compact
+display` or `Full panel`. Wire it to whatever you like: a key, a button on a debug
+page, a story row at the top of the chapter you are measuring.
+
+The two-node recipe for a key, in the game's **global** blueprint:
+
+```
+On Key Down (key: F3)  →  Set Performance Overlay (show: Compact display)
+On Key Down (key: F9)  →  Start Profiling  →  Set Performance Overlay (show: Full panel)
+```
+
+`On Key Down` is a global head, so the binding works wherever the player is, and
+it is your binding — spelled in the same vocabulary as every other key the project
+answers to, and visible in the graph rather than buried in a plugin.
+
+The full panel closes from its own Close button or by clicking outside it.
 
 The compact display is transparent to the pointer and stays out of the way; the
 full panel takes the pointer while it is up.
@@ -84,20 +104,26 @@ All under the `Performance` category.
 
 | Node | Does |
 |---|---|
+| Start Profiling | Puts the probes in and measures from here, dropping any window already open. |
+| Stop Profiling | Takes the probes back out. What was measured stays readable. |
 | Set Performance Overlay | Shows the compact display, the full panel, or nothing. |
 | Mark Performance Event | Drops a labelled marker on the timeline. |
 | Begin / End Performance Span | Measures a named region; `End` outputs its duration. |
 | Get Performance Stats | Frame rate, frame time, hitches, stalls, heap, held bytes, assets loaded. |
 | Capture Performance Report | Takes a report and outputs it as a summary and as JSON. |
-| Reset Performance Session | Drops everything measured so far and starts a new window. |
+
+`Start Profiling` is also how you bound a measurement: run it at the top of the
+chapter you suspect and the report describes that chapter rather than the whole
+session. A window that did not see the boot says so in the report's notes, so a
+bounded measurement can never read as a complete one.
 
 `Get Performance Stats` is the one to reach for when a scene should scale itself
 down on a weak machine: read the frame rate, branch, skip the expensive version.
 
 Every node runs in every environment. Where the profiler is not armed — a built
-game with availability left at Dev Mode, or a preview inside the editor — they do
-nothing and leave through their exec pin, so a graph that measures itself keeps
-working in the build that is not measuring.
+game with availability left at Dev Mode — they do nothing and leave through their
+exec pin, so a graph that measures itself keeps working in the build that is not
+measuring.
 
 `Mark`, `Begin Span` and `End Span` each take an optional wired string pin that
 overrides the inspector field, so a loop can name what it is measuring.

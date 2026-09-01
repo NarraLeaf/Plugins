@@ -14,7 +14,6 @@
 import { useEffect, useState } from "react";
 import { Gauge } from "lucide-react";
 import { PanelPosition, definePlugin, ui, type PluginApp } from "narraleaf-studio/plugin";
-import { formatChord, parseChord } from "./hotkey";
 import { createPerformanceNodes, inertBridge } from "./nodes";
 import {
     DEFAULT_SETTINGS,
@@ -80,75 +79,10 @@ function useSettings(store: SettingsStore): InspectorSettings {
     return settings;
 }
 
-/**
- * The hotkey field, edited as text and committed on blur.
- *
- * Kept as a draft while it is being typed, because `Ctrl+Shift+F3` is invalid at every keystroke
- * until the last one, and a field that reverts to the stored value on the first unparsable character
- * cannot be edited at all.
- */
-function HotkeyField({
-    store,
-    settings,
-    disabled,
-    title,
-}: {
-    store: SettingsStore;
-    settings: InspectorSettings;
-    disabled: boolean;
-    title: string | undefined;
-}) {
-    const [draft, setDraft] = useState(settings.hotkey);
-    const [touched, setTouched] = useState(false);
-    useEffect(() => {
-        setDraft(settings.hotkey);
-        setTouched(false);
-    }, [settings.hotkey]);
-
-    const parsed = parseChord(draft);
-    const commit = (): void => {
-        if (!parsed) {
-            setDraft(settings.hotkey);
-            setTouched(false);
-            return;
-        }
-        void store.update({ hotkey: formatChord(parsed) });
-    };
-
-    return (
-        <div className="flex flex-col items-end gap-1">
-            <ui.Input
-                size="sm"
-                value={draft}
-                disabled={disabled}
-                title={title}
-                variant={touched && !parsed ? "error" : "default"}
-                onChange={event => {
-                    setDraft(event.target.value);
-                    setTouched(true);
-                }}
-                onBlur={commit}
-                onKeyDown={event => {
-                    if (event.key === "Enter") {
-                        event.currentTarget.blur();
-                    }
-                }}
-            />
-            {touched && !parsed ? (
-                <span className="text-xs text-danger">
-                    Write a key name, on its own or after Ctrl, Alt, Shift or Meta.
-                </span>
-            ) : null}
-        </div>
-    );
-}
-
 function PerformancePanel({ store }: { store: SettingsStore }) {
     const settings = useSettings(store);
     const freeze = ui.useFreezeGuard();
     const writes = freeze.writes();
-    const chord = parseChord(settings.hotkey);
-    const hotkey = chord ? formatChord(chord) : settings.hotkey;
 
     return (
         <ui.Panel.Root>
@@ -162,8 +96,8 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                         label="Overlay availability"
                         description={
                             settings.availability === "everywhere"
-                                ? "Previews and built games carry the overlay. Anyone who presses the hotkey can open it."
-                                : "Only Dev Mode. Previews and built games ignore the hotkey."
+                                ? "Previews and built games can open the overlay. Whatever opens it in Dev Mode opens it for a player too."
+                                : "Only Dev Mode. In a preview or a built game the nodes do nothing."
                         }
                         control={
                             <ui.Select
@@ -179,14 +113,22 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                         }
                     />
                     <ui.Panel.Row
-                        label="Overlay hotkey"
-                        description={`${hotkey} shows the compact display. Shift+${hotkey} opens the full panel.`}
+                        label="Start measuring"
+                        description={
+                            settings.collectFrom === "graph"
+                                ? "Nothing is measured until a Start Profiling node runs, so the boot is not covered."
+                                : "From the first frame, so startup is covered."
+                        }
                         control={
-                            <HotkeyField
-                                store={store}
-                                settings={settings}
+                            <ui.Select
+                                size="sm"
+                                value={settings.collectFrom}
                                 disabled={writes.disabled}
-                                title={writes.title}
+                                options={[
+                                    { value: "gameStart", label: "At game start" },
+                                    { value: "graph", label: "When a graph says so" },
+                                ]}
+                                onChange={value => void store.update({ collectFrom: value === "graph" ? "graph" : "gameStart" })}
                             />
                         }
                     />
@@ -270,12 +212,16 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
 
                 <ui.Panel.Section title="In the game">
                     <ui.Panel.Row
-                        label="Reports"
-                        description="The full panel copies a report as JSON or as a written summary, and keeps the last capture in plugin storage."
+                        label="Opening the overlay"
+                        description="A Set Performance Overlay node. For a key, put an On Key Down head in the game's global blueprint and wire it to that node — the binding is yours, and this plugin takes no key of its own."
                     />
                     <ui.Panel.Row
                         label="Blueprint nodes"
-                        description="Set Performance Overlay, Mark Performance Event, Begin and End Performance Span, Get Performance Stats, Capture Performance Report and Reset Performance Session, under the Performance category."
+                        description="Start and Stop Profiling, Set Performance Overlay, Mark Performance Event, Begin and End Performance Span, Get Performance Stats, and Capture Performance Report, under the Performance category."
+                    />
+                    <ui.Panel.Row
+                        label="Reports"
+                        description="The full panel copies a report as JSON or as a written summary, and keeps the last capture in plugin storage."
                     />
                 </ui.Panel.Section>
             </div>

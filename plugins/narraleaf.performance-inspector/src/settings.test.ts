@@ -17,7 +17,7 @@ describe("normalizeSettings", () => {
     it("keeps a whole object when one field is nonsense", () => {
         const settings = normalizeSettings({
             availability: "everywhere",
-            hotkey: 42,
+            collectFrom: "whenever",
             openAt: "somewhere",
             corner: "middle",
             historySeconds: "long",
@@ -36,9 +36,10 @@ describe("normalizeSettings", () => {
         expect(normalizeSettings({ historySeconds: 100000 }).historySeconds).toBe(300);
     });
 
-    it("trims the hotkey and refuses to store an empty one", () => {
-        expect(normalizeSettings({ hotkey: "  Ctrl+P  " }).hotkey).toBe("Ctrl+P");
-        expect(normalizeSettings({ hotkey: "   " }).hotkey).toBe(DEFAULT_SETTINGS.hotkey);
+    it("defaults to measuring from the first frame, since nothing else can cover the boot", () => {
+        expect(normalizeSettings({}).collectFrom).toBe("gameStart");
+        expect(normalizeSettings({ collectFrom: "graph" }).collectFrom).toBe("graph");
+        expect(normalizeSettings({ collectFrom: "later" }).collectFrom).toBe("gameStart");
     });
 
     it("stamps the current version whatever the stored record claimed", () => {

@@ -162,6 +162,12 @@ function buildNotes(snapshot: CollectorSnapshot): string[] {
     if (snapshot.openSpans.length > 0) {
         notes.push(`Spans still open at capture, so absent from the span list: ${snapshot.openSpans.join(", ")}.`);
     }
+    if (snapshot.startedLate) {
+        notes.push(
+            "Measurement began after the game had already started, so the boot and anything loaded "
+            + "before it are not in these figures.",
+        );
+    }
     if (snapshot.frames.samples === 0) {
         notes.push("No frames were sampled. Either the window was never painted or the frame probe could not install.");
     }

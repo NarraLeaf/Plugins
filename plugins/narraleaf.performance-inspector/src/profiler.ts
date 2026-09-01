@@ -95,25 +95,69 @@ export class Profiler {
         return this.options.settings;
     }
 
-    /** Installs the probes and starts the clock. Idempotent. */
-    public start(): void {
+    /**
+     * Installs the probes and starts the clock. Idempotent.
+     *
+     * `startedLate` marks a run that began after the game did, which every report then says out
+     * loud - a table missing the boot must not read like a table that covers it.
+     */
+    public start(options: { startedLate?: boolean } = {}): void {
         if (this.teardown) {
             return;
         }
-        this.teardown = installProbes({
+        if (options.startedLate) {
+            this.collector.setStartedLate(true);
+        }
+        this.arm();
+    }
+
+    /** Installs the probes and says so on the timeline. Assumes the caller checked it is not armed. */
+    private arm(): void {
+        this.teardown ??= installProbes({
             scope: this.options.scope,
             collector: this.collector,
             instrumentAssets: this.options.settings.instrumentAssets,
         });
-        this.collector.mark("profiler", "profiler started");
+        this.collector.mark("profiler", "measurement started");
         this.syncTicker();
+        this.notify();
     }
 
-    /** Removes everything this installed. The collected numbers stay readable. */
+    /**
+     * What the `Start Profiling` node does: measure from here.
+     *
+     * Arms the probes if they are not in, and throws away whatever window was already open, because
+     * a graph asking to start a profile is asking for a measurement of what comes next rather than
+     * for more of what came before.
+     */
+    public startFresh(): void {
+        this.collector.reset(this.options.epochNow());
+        this.collector.setStartedLate(true);
+        this.cachedSnapshot = null;
+        this.arm();
+    }
+
+    /**
+     * Removes everything this installed. The collected numbers stay readable.
+     *
+     * What the `Stop Profiling` node does. The overlay keeps showing the last state rather than
+     * emptying - someone who stopped a profile did it to read the result - and says it is no longer
+     * measuring so a frozen frame rate is not mistaken for a real one.
+     */
     public stop(): void {
-        this.teardown?.();
+        if (!this.teardown) {
+            return;
+        }
+        this.teardown();
         this.teardown = null;
+        this.collector.mark("profiler", "measurement stopped");
         this.stopTicker();
+        this.notify();
+    }
+
+    /** Whether the probes are in. The panel says so; a frozen number needs the caveat beside it. */
+    public isRunning(): boolean {
+        return this.teardown !== null;
     }
 
     public getView(): OverlayView {
@@ -200,9 +244,16 @@ export class Profiler {
         return this.collector.endSpan(name);
     }
 
-    /** Throws away the measurements and keeps the wiring. See `PerformanceCollector.reset`. */
+    /**
+     * Throws away the measurements and keeps the wiring. See `PerformanceCollector.reset`.
+     *
+     * A window opened by a reset is a window that did not see the boot, so it carries the same
+     * caveat a graph-started one does. Every report either covers the start of the run or says it
+     * does not.
+     */
     public reset(): void {
         this.collector.reset(this.options.epochNow());
+        this.collector.setStartedLate(true);
         this.cachedSnapshot = null;
         this.notify();
     }

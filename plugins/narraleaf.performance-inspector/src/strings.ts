@@ -71,7 +71,8 @@ export type OverlayStrings = {
     notes: string;
     spans: string;
     openSpans: string;
-    hotkeyHint: string;
+    /** Shown beside the session length once Stop Profiling has taken the probes out. */
+    notMeasuring: string;
     transferred: string;
     total: string;
     /**
@@ -153,7 +154,7 @@ const EN: OverlayStrings = {
     notes: "Notes",
     spans: "Spans",
     openSpans: "Still open",
-    hotkeyHint: "Press again to hide, with Shift for the full panel.",
+    notMeasuring: "not measuring",
     transferred: "Transferred",
     total: "Total",
     addressCount: count => `${count} ${count === 1 ? "address" : "addresses"}`,
@@ -228,7 +229,7 @@ const ZH: OverlayStrings = {
     notes: "说明",
     spans: "区间",
     openSpans: "尚未结束",
-    hotkeyHint: "再按一次隐藏，按住 Shift 打开完整面板。",
+    notMeasuring: "已停止统计",
     transferred: "已传输",
     total: "合计",
     addressCount: count => `${count} 个地址`,
@@ -303,7 +304,7 @@ const JA: OverlayStrings = {
     notes: "注記",
     spans: "区間",
     openSpans: "未終了",
-    hotkeyHint: "もう一度押すと閉じ、Shift 併用で詳細パネルを開きます。",
+    notMeasuring: "計測停止中",
     transferred: "転送量",
     total: "合計",
     addressCount: count => `${count} 件のアドレス`,

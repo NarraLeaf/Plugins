@@ -250,6 +250,14 @@ export type CollectorSnapshot = {
         peakBytes: number;
         recentUsedBytes: number[];
     };
+    /**
+     * Whether measurement began after the game had already started.
+     *
+     * A run profiled from a `Start Profiling` node has a boot it never saw, and every asset loaded
+     * before that node ran is missing from a table that otherwise reads as complete. The report says
+     * so rather than leaving the reader to notice.
+     */
+    startedLate: boolean;
     resources: {
         instrumented: boolean;
         records: ResourceRecord[];
@@ -408,6 +416,7 @@ export class PerformanceCollector {
     private heapPeak = 0;
 
     private instrumented = false;
+    private startedLate = false;
     private readonly resources = new Map<string, ResourceRecord>();
     /**
      * Running totals, kept in step with the records rather than recomputed.
@@ -472,6 +481,11 @@ export class PerformanceCollector {
     /** Declared by the probes, so the asset pages can say why they are empty rather than just being. */
     public setInstrumented(instrumented: boolean): void {
         this.instrumented = instrumented;
+    }
+
+    /** See {@link CollectorSnapshot.startedLate}. */
+    public setStartedLate(late: boolean): void {
+        this.startedLate = late;
     }
 
     public setLongTasksSupported(supported: boolean): void {
@@ -1007,6 +1021,7 @@ export class PerformanceCollector {
                 droppedAddresses: this.droppedAddresses,
                 droppedRequests: this.droppedRequests,
             },
+            startedLate: this.startedLate,
             retained: this.retainedTotals(),
             markers: [...this.markers],
             droppedMarkers: this.droppedMarkers,
