@@ -6,7 +6,7 @@
     {
       "id": "helloyork.nekolang-i18n",
       "name": "猫娘语翻译",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "description": "把 Studio 界面变成软萌猫娘语的中文语言包（喵~）。新增一个独立语言「喵语（猫娘语）」，不改动内置简体中文。",
       "publisher": "helloyork",
       "path": "plugins/helloyork.nekolang-i18n",
@@ -35,9 +35,9 @@
       },
       "permissions": [],
       "release": {
-        "tag": "helloyork.nekolang-i18n@1.1.0",
-        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/helloyork.nekolang-i18n%401.1.0",
-        "download": "https://github.com/NarraLeaf/Plugins/releases/download/helloyork.nekolang-i18n%401.1.0/helloyork.nekolang-i18n-1.1.0.zip"
+        "tag": "helloyork.nekolang-i18n@1.2.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/helloyork.nekolang-i18n%401.2.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/helloyork.nekolang-i18n%401.2.0/helloyork.nekolang-i18n-1.2.0.zip"
       },
       "studioVersion": ">=0.0.1"
     },

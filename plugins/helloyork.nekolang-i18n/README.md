@@ -29,11 +29,16 @@
 Studio 的 `catalog/zh` 有增删，都要重新生成一次：
 
 1. 把 Studio 的 `src/shared/i18n/catalog/zh` 扁平化成 `dotted.key -> string`；
-2. 以它为底，套回本包已有的猫娘译文（键仍存在的那些）；
+2. 以它为底，套回本包已有的猫娘译文 —— **只套那些中文源没变过的键**。中文源改过而猫娘译文
+   照旧，读者看到的就是上一版 Studio 说过的话；判断办法是把 Studio 仓库回到上次生成本包的
+   那个提交，扁平化一份当时的中文，与今天的逐键比较，变过的一律重写；
 3. 新增键里落在已猫娘化命名空间（`launcher` / `settings` / `devMode` / `menu` /
    `actions` / `build` / `common` / `dialogs` / `wizard` / `dashboard` / `project` /
    `welcome`）的，补写猫娘译文；其余原样带上中文；
-4. 校对 `{placeholder}` 占位符与中文源一致 —— 漏掉一个就是运行时空洞。
+4. 校对 `{placeholder}` 占位符与中文源一致 —— 漏掉一个就是运行时空洞；
+5. 校对术语：中文源写「资产」的地方猫娘译文也得写「资产」，「工程」一个都不许出现
+   （Studio 的中文里它已经清零了）。专有名词、平台名、URL 与被 `{type}` 插值的片段
+   （`dialogs.noun.*`）保持原样，不要加「喵」—— 加了就会双份。
 - `build.mjs` 在打包时把 `locales/*.json` 一并拷入 `dist/`（模板的构建脚本只拷贝入口
   与清单，语言文件是数据、需要额外拷贝）。
 
