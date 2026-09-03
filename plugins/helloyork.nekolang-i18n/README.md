@@ -5,14 +5,18 @@
 ## 它做了什么
 
 安装并启用后，「设置 → 语言」里会多出一项 **「喵语（猫娘语）」**。选中它，Studio
-的界面文字就会变成猫娘语气：菜单、启动器、仪表盘、对话框、向导、构建面板等常读界面
-都会带上「喵」。
+的界面文字就会变成猫娘语气：菜单、启动器、工作区外壳、仪表盘、对话框、向导、设置、
+资产库、角色、插件、帮助、构建与版本控制等日常会读到的界面都会带上「喵」，
+约占整个界面文案的四成。
 
 - **不改动内置简体中文。** 本包注册的是一个全新的独立语言 `zh-x-neko`，和内置
   `简体中文` 互不干扰 —— 随时可以切回去。
-- **只翻主要内容。** 高可见度、常读的界面做了猫娘化；蓝图 / 表达式 / 属性 / 动效 /
-  UI 编辑器等密集技术界面保留忠实中文 —— 本包会把 Studio 简体中文的**全部**键原样带上，
-  所以没被猫娘化的地方读起来和内置简体中文一模一样。
+- **只翻日常界面。** 蓝图 / 故事编辑器与检查器 / 表达式 / 属性 / 动效 / UI 编辑器 /
+  控件 / 项目检查 / 版本比较这些密集技术界面保留忠实中文 —— 本包会把 Studio 简体中文的
+  **全部**键原样带上，所以没被猫娘化的地方读起来和内置简体中文一模一样。
+- **三类文字永不猫娘化**，即使它落在已覆盖的命名空间里：写进作者项目的默认文档名
+  （`defaultDoc.*`）、帮助正文（`help.topics.*.body`，说明要准），以及 Live2D 与 Spine
+  的授权条款（`characters.editor.runtime.{live2dTerms,spineTerms}`，那是法律文本）。
 
 ## 技术说明
 
@@ -29,11 +33,19 @@
 Studio 的 `catalog/zh` 有增删，都要重新生成一次：
 
 1. 把 Studio 的 `src/shared/i18n/catalog/zh` 扁平化成 `dotted.key -> string`；
-2. 以它为底，套回本包已有的猫娘译文（键仍存在的那些）；
-3. 新增键里落在已猫娘化命名空间（`launcher` / `settings` / `devMode` / `menu` /
-   `actions` / `build` / `common` / `dialogs` / `wizard` / `dashboard` / `project` /
-   `welcome`）的，补写猫娘译文；其余原样带上中文；
-4. 校对 `{placeholder}` 占位符与中文源一致 —— 漏掉一个就是运行时空洞。
+2. 以它为底，套回本包已有的猫娘译文 —— **只套那些中文源没变过的键**。中文源改过而猫娘译文
+   照旧，读者看到的就是上一版 Studio 说过的话；判断办法是把 Studio 仓库回到上次生成本包的
+   那个提交，扁平化一份当时的中文，与今天的逐键比较，变过的一律重写；
+3. 新增键里落在已猫娘化命名空间的，补写猫娘译文；其余原样带上中文。当前覆盖的是
+   `about` / `actions` / `assets` / `brand` / `build` / `characters` / `common` /
+   `console` / `crash` / `dashboard` / `developer` / `devMode` / `dialogs` /
+   `dictionary` / `documents` / `game` / `help` / `launcher` / `menu` / `onboarding` /
+   `placeholders` / `plugins` / `pluginPermission` / `project` / `projectTrust` /
+   `serverTrust` / `settings` / `update` / `welcome` / `wizard` / `workspace`；
+4. 校对 `{placeholder}` 占位符与中文源一致 —— 漏掉一个就是运行时空洞；
+5. 校对术语：中文源写「资产」的地方猫娘译文也得写「资产」，「工程」一个都不许出现
+   （Studio 的中文里它已经清零了）。专有名词、平台名、URL 与被 `{type}` 插值的片段
+   （`dialogs.noun.*`）保持原样，不要加「喵」—— 加了就会双份。
 - `build.mjs` 在打包时把 `locales/*.json` 一并拷入 `dist/`（模板的构建脚本只拷贝入口
   与清单，语言文件是数据、需要额外拷贝）。
 
