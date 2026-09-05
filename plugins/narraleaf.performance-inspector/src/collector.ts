@@ -14,6 +14,8 @@
  * measurement must never claim falsely.
  */
 
+import type { EngineCacheReader, EngineImageCache } from "./engineCache";
+
 /** How a loaded byte range is going to be used. Read off the address, since that is all we have. */
 export type ResourceKind = "image" | "audio" | "video" | "font" | "script" | "style" | "document" | "other";
 
@@ -274,6 +276,14 @@ export type CollectorSnapshot = {
         droppedRequests: number;
     };
     retained: RetainedTotals;
+    /**
+     * The engine’s own image-cache accounting at the moment the snapshot was taken, or null when
+     * this build cannot ask (no `diagnostics` capability) or no game is running yet.
+     *
+     * A live reading rather than an accumulated one: it is a picture of what is held now, and the
+     * ring buffers above would say nothing useful about a number that falls as often as it rises.
+     */
+    engineCache: EngineImageCache | null;
     markers: TimelineMarker[];
     droppedMarkers: number;
     scenes: SceneRecord[];
@@ -325,6 +335,13 @@ export type CollectorOptions = {
      * exactly when the answer matters most.
      */
     now: () => number;
+    /**
+     * How to ask the engine what its image cache is holding, when this build may ask at all.
+     *
+     * Injected rather than reached for, like the clock: the collector is driven by tests that have
+     * no engine, and a profiler that could only be exercised inside a running game would not be.
+     */
+    readEngineCache?: EngineCacheReader;
     maxAddresses?: number;
     maxMarkers?: number;
     maxSpans?: number;
@@ -422,7 +439,9 @@ function round(value: number, digits = 2): number {
 }
 
 export class PerformanceCollector {
-    private readonly options: Required<CollectorOptions>;
+    // `Required` everywhere except the engine reader: the caps have defaults, and asking the engine
+    // is a thing a build may simply not be able to do.
+    private readonly options: Required<Omit<CollectorOptions, "readEngineCache">> & Pick<CollectorOptions, "readEngineCache">;
     private readonly frameRing: NumberRing;
     private readonly heapRing: NumberRing;
 
@@ -1096,6 +1115,7 @@ export class PerformanceCollector {
             },
             startedLate: this.startedLate,
             retained: this.retainedTotals(),
+            engineCache: this.options.readEngineCache?.() ?? null,
             markers: [...this.markers],
             droppedMarkers: this.droppedMarkers,
             scenes: [...this.sceneOrdinals.entries()].map(([id, ordinal]) => ({ ordinal, id })),

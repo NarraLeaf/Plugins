@@ -26,6 +26,7 @@ import { Fragment, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { RESOURCE_KINDS, type ResourceRecord } from "./collector";
+import { budgetShare, hostOwnsImageBytes } from "./engineCache";
 import type { Profiler } from "./profiler";
 import { formatBytes, formatMs } from "./report";
 import type { OverlayCorner } from "./settings";
@@ -66,6 +67,17 @@ const CORNER_STYLES: Record<OverlayCorner, CSSProperties> = {
     "bottom-left": { bottom: 12, left: 12 },
     "bottom-right": { bottom: 12, right: 12 },
 };
+
+/**
+ * What to print under a byte figure: how much of its budget it is using, or that there is none.
+ *
+ * A budget of `Infinity` is a game that removed the limit on purpose, and a percentage against it
+ * would read as 0% for ever - so it says so in words instead.
+ */
+function budgetHint(used: number, budget: number, strings: OverlayStrings): string {
+    const share = budgetShare(used, budget);
+    return share === null ? strings.noLimit : strings.ofBudget(`${Math.round(share * 100)}%`);
+}
 
 function fpsColour(fps: number): string {
     if (fps >= 55) {
@@ -697,6 +709,48 @@ export function PerformanceOverlay({ profiler, readStrings }: PerformanceOverlay
                                     <Sparkline values={snapshot.heap.recentUsedBytes} width={880} height={70} fluid />
                                 </Section>
                             ) : null}
+                            <Section title={strings.engineCache}>
+                                <div style={{ color: TEXT_DIM, marginBottom: 8 }}>
+                                    {snapshot.engineCache ? strings.engineCacheExplain : strings.engineCacheUnavailable}
+                                </div>
+                                {snapshot.engineCache ? (
+                                    <>
+                                        <StatRow>
+                                            <Stat
+                                                label={strings.engineEntries}
+                                                value={String(snapshot.engineCache.entries)}
+                                            />
+                                            <Stat
+                                                label={strings.engineFetched}
+                                                value={formatBytes(snapshot.engineCache.blobBytes)}
+                                                hint={budgetHint(
+                                                    snapshot.engineCache.blobBytes,
+                                                    snapshot.engineCache.budget.blobBytes,
+                                                    strings,
+                                                )}
+                                            />
+                                            <Stat
+                                                label={strings.engineDecoded}
+                                                value={formatBytes(snapshot.engineCache.decodedBytes)}
+                                                hint={budgetHint(
+                                                    snapshot.engineCache.decodedBytes,
+                                                    snapshot.engineCache.budget.decodedBytes,
+                                                    strings,
+                                                )}
+                                            />
+                                            <Stat
+                                                label={strings.enginePinned}
+                                                value={String(snapshot.engineCache.pinned)}
+                                            />
+                                        </StatRow>
+                                        {hostOwnsImageBytes(snapshot.engineCache) ? (
+                                            // The one reading that would otherwise be misread as good news: no bytes
+                                            // held, because someone else is holding them.
+                                            <div style={{ color: ACCENT, marginTop: 8 }}>{strings.engineHostOwned}</div>
+                                        ) : null}
+                                    </>
+                                ) : null}
+                            </Section>
                             <Section title={strings.heldInMemory}>
                                 <div style={{ color: TEXT_DIM, marginBottom: 8 }}>{strings.heldExplain}</div>
                                 <div

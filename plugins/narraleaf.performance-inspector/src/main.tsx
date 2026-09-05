@@ -175,7 +175,7 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                             <ui.Switch
                                 checked={settings.instrumentAssets}
                                 disabled={writes.disabled}
-                                title={writes.title}
+                                data-tip={writes["data-tip"]}
                                 onCheckedChange={checked => void store.update({ instrumentAssets: checked })}
                             />
                         }
@@ -203,7 +203,7 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                             <ui.Switch
                                 checked={settings.logOnCapture}
                                 disabled={writes.disabled}
-                                title={writes.title}
+                                data-tip={writes["data-tip"]}
                                 onCheckedChange={checked => void store.update({ logOnCapture: checked })}
                             />
                         }

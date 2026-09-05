@@ -1,50 +1,50 @@
 {
-  "name": "@narraleaf-plugins/performance-inspector",
-  "version": "0.1.0",
-  "private": true,
-  "description": "An in-game profiler driven by blueprint nodes: frame rate, heap, long tasks, asset loads and retained memory, with reports you can copy out.",
-  "license": "MPL-2.0",
-  "type": "module",
-  "keywords": [
-    "narraleaf",
-    "narraleaf-studio-plugin",
-    "performance",
-    "profiler",
-    "diagnostics",
-    "overlay",
-    "assets",
-    "memory"
-  ],
-  "packageManager": "yarn@4.10.3",
-  "scripts": {
-    "build": "node build.mjs",
-    "dev": "node build.mjs --dev",
-    "icon": "node tools/make-icon.mjs icon.png",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@types/react-dom": "^19.0.0",
-    "esbuild": "^0.25.0",
-    "narraleaf-studio": "^0.5.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
-  },
-  "narraleaf": {
-    "categories": [
-      "workflow",
-      "blueprint"
+    "name": "@narraleaf-plugins/performance-inspector",
+    "version": "0.2.0",
+    "private": true,
+    "description": "An in-game profiler driven by blueprint nodes: frame rate, heap, long tasks, asset loads and retained memory, with reports you can copy out.",
+    "license": "MPL-2.0",
+    "type": "module",
+    "keywords": [
+        "narraleaf",
+        "narraleaf-studio-plugin",
+        "performance",
+        "profiler",
+        "diagnostics",
+        "overlay",
+        "assets",
+        "memory"
     ],
-    "studioVersion": ">=0.9.0",
-    "locales": {
-      "zh-CN": {
-        "name": "性能检查器",
-        "description": "跑在游戏里的性能分析器，由蓝图节点驱动——插件不占用任何按键，要快捷键就自己用 On Key Down 头绑。帧率与卡顿、JavaScript 堆、长任务、这一轮取过的每个资产及其字节数与解码耗时，以及其中还有多少仍留在内存里。报告可以按 JSON 或文字摘要复制出来。"
-      },
-      "ja": {
-        "name": "パフォーマンス インスペクター",
-        "description": "ゲームの中で動くプロファイラ。ブループリントノードで開始と表示を行い、プラグイン自身はキーを一切占有しません（ショートカットは On Key Down ヘッドで自分で割り当てます）。フレームレートとヒッチ、JavaScript ヒープ、ロングタスク、取得した全アセットのバイト数とデコード時間、メモリに残っている量を表示し、レポートは JSON または文章の要約としてコピーできます。"
-      }
+    "packageManager": "yarn@4.10.3",
+    "scripts": {
+        "build": "node build.mjs",
+        "dev": "node build.mjs --dev",
+        "icon": "node tools/make-icon.mjs icon.png",
+        "test": "vitest run",
+        "typecheck": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@types/react-dom": "^19.0.0",
+        "esbuild": "^0.25.0",
+        "narraleaf-studio": "^0.8.0",
+        "typescript": "^5.7.0",
+        "vitest": "^3.0.0"
+    },
+    "narraleaf": {
+        "categories": [
+            "workflow",
+            "blueprint"
+        ],
+        "studioVersion": ">=0.9.3",
+        "locales": {
+            "zh-CN": {
+                "name": "性能检查器",
+                "description": "跑在游戏里的性能分析器，由蓝图节点驱动——插件不占用任何按键，要快捷键就自己用 On Key Down 头绑。帧率与卡顿、JavaScript 堆、长任务、这一轮取过的每个资产及其字节数与解码耗时，以及引擎自己的图像缓存正持有多少、离预算还有多远。报告可以按 JSON 或文字摘要复制出来。"
+            },
+            "ja": {
+                "name": "パフォーマンス インスペクター",
+                "description": "ゲームの中で動くプロファイラ。ブループリントノードで開始と表示を行い、プラグイン自身はキーを一切占有しません（ショートカットは On Key Down ヘッドで自分で割り当てます）。フレームレートとヒッチ、JavaScript ヒープ、ロングタスク、取得した全アセットのバイト数とデコード時間、そしてエンジン自身の画像キャッシュが予算に対してどれだけ保持しているかを表示し、レポートは JSON または文章の要約としてコピーできます。"
+            }
+        }
     }
-  }
 }

@@ -381,3 +381,40 @@ describe("quick", () => {
         expect(quick.retainedBytes).toBe(snapshot.retained.bytes);
     });
 });
+
+/**
+ * The engine reading passes through untouched, and its absence is a value rather than a gap.
+ *
+ * Taken on every snapshot rather than accumulated: what the engine holds falls as often as it rises,
+ * so a snapshot has to ask again rather than report the highest it ever saw.
+ */
+describe("the engine's image cache", () => {
+    const reading = {
+        entries: 283,
+        blobBytes: 0,
+        decodedEntries: 41,
+        decodedBytes: 132_644_372,
+        pinned: 5,
+        budget: { blobBytes: 268_435_456, decodedBytes: 134_217_728 },
+    };
+
+    it("is null when the build cannot ask", () => {
+        const { collector } = makeCollector();
+
+        expect(collector.snapshot().engineCache).toBeNull();
+    });
+
+    it("is whatever the engine answered at the moment of the snapshot", () => {
+        let live: typeof reading | null = null;
+        const collector = new PerformanceCollector({
+            historySeconds: 30,
+            startedAtEpochMs: 0,
+            now: () => 0,
+            readEngineCache: () => live,
+        });
+
+        expect(collector.snapshot().engineCache).toBeNull();
+        live = reading;
+        expect(collector.snapshot().engineCache).toEqual(reading);
+    });
+});

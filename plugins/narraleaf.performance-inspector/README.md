@@ -93,8 +93,9 @@ compact display carries the same chart, smaller.
 bytes, decode time, and whether it is still held. Sortable, filterable. An
 address fetched more than once is called out, because that is usually the finding.
 
-**Memory** — the heap over time, and everything the game is still holding through
-a live object URL, broken down by kind.
+**Memory** — the heap over time, what the engine’s own image cache is holding
+against its budgets, and everything the game is still holding through a live
+object URL, broken down by kind.
 
 **Timeline** — boot markers, scene changes, saves and restores, choices, and
 whatever the story marked itself.
@@ -154,12 +155,26 @@ replaced, and never make a request of their own or hold a reference to a respons
 body. A failure on the recording side is swallowed rather than turned into a
 failed asset load.
 
-**Retention is measured through object URLs.** The engine keeps a picture alive
-by keeping its object URL alive, so a URL created and never revoked is a payload
-the process is still holding. That is what the memory page counts — and it is
-images and video, not audio: a clip read through XHR and handed to
+**Retention is measured two ways, because one of them stopped being enough.**
+
+The original way is object URLs: a player that fetches its own bytes turns them
+into a blob and keeps the URL alive for as long as it means to keep the picture,
+so a URL created and never revoked is a payload the process is still holding.
+That covers images and video, not audio — a clip read through XHR and handed to
 `decodeAudioData` becomes an audio buffer, which nothing in a page can measure.
 Audio still appears in the asset table with its bytes and its decode time.
+
+**A host can serve the game’s assets itself, and then that count means nothing.**
+Studio does: the URL a row resolved is already one the browser can fetch and
+cache, so the player is handed the URL instead of the bytes and mints no object
+URL at all. Watching for object URLs in such a game counts zero — not because
+nothing is held, but because the mechanism being watched is not the one in use.
+So the panel also asks the engine directly, through the `diagnostics` capability,
+and shows what its image cache reports: how many pictures it is tracking, the
+bytes it fetched (zero when the host owns them), the decoded bitmaps it is
+keeping, and both budgets those are held against. When the two disagree in that
+particular way, the page says so rather than leaving the zero to be read as good
+news.
 
 The profiler reports its own per-frame cost on the Frames page, because the first
 question anyone asks a profiler is whether the numbers include the profiler.

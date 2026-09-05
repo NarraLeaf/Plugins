@@ -29,7 +29,7 @@ import { normalizeSettings, SETTINGS_NAMESPACE } from "./settings";
 import { stringsFor } from "./strings";
 
 /** Kept in step with manifest.json; it is stamped into every report. */
-const PLUGIN_VERSION = "0.1.0";
+const PLUGIN_VERSION = "0.2.0";
 
 type BrowserScope = ProbeScope & EnvironmentScope & {
     navigator?: { clipboard?: { writeText?: (text: string) => Promise<void> } };
@@ -61,6 +61,12 @@ export default defineRuntimePlugin({
         const host: ProfilerHost = {
             log: (level, message) => app.game.log(level, message),
             readLocale: () => app.game.locale?.current,
+            // Absent unless the manifest asked for `diagnostics` and the shell can answer, which is
+            // the same shape every other optional member here has: the profiler simply reports one
+            // fewer thing rather than degrading.
+            ...(app.game.diagnostics
+                ? { readEngineCache: () => app.game.diagnostics?.imageCache() ?? null }
+                : {}),
         };
         const store = app.game.store;
         if (store) {
