@@ -20,6 +20,7 @@ import {
     type TimelineMarkerKind,
 } from "./collector";
 import { describeEnvironment, type EnvironmentScope } from "./environment";
+import type { EngineCacheReader } from "./engineCache";
 import { installProbes, type ProbeScope, type ProbeTeardown } from "./probes";
 import {
     buildReport,
@@ -40,6 +41,14 @@ export type ProfilerHost = {
     writeClipboard?: (text: string) => Promise<void>;
     /** The game's display language, when the manifest asked for `locale`. */
     readLocale?: () => string | undefined;
+    /**
+     * The engine's image cache, when the manifest asked for `diagnostics`.
+     *
+     * The one figure here the plugin cannot work out for itself: once a host serves the game's
+     * assets, nothing mints the object URLs this plugin counts, and what the engine holds stops
+     * being visible from the browser at all. See `engineCache.ts`.
+     */
+    readEngineCache?: EngineCacheReader;
 };
 
 export type ProfilerOptions = {
@@ -88,6 +97,7 @@ export class Profiler {
             historySeconds: options.settings.historySeconds,
             startedAtEpochMs: options.epochNow(),
             now: options.now,
+            ...(options.host.readEngineCache ? { readEngineCache: options.host.readEngineCache } : {}),
         });
     }
 

@@ -57,6 +57,9 @@ export const PLUGIN_RUNTIME_CAPABILITIES = [
     "ui.overlay",
     "assets",
     "locale",
+    "menu",
+    "story.compile",
+    "diagnostics",
 ];
 
 /**

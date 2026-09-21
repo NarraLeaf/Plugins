@@ -16,6 +16,7 @@ import type {
     ResourceRecord,
 } from "./collector";
 import { RESOURCE_KINDS } from "./collector";
+import { hostOwnsImageBytes } from "./engineCache";
 
 export const REPORT_FORMAT = "narraleaf.performance-inspector/report";
 export const REPORT_VERSION = 1;
@@ -86,6 +87,13 @@ export type PerformanceReport = {
         entries: ReportedResource[];
     };
     retained: CollectorSnapshot["retained"];
+    /**
+     * The engine’s own image-cache reading at capture time, or null when the build could not ask.
+     *
+     * Kept beside `retained` rather than folded into it because the two answer the same question
+     * from opposite sides, and which of them is meaningful depends on who is serving the assets.
+     */
+    engineCache: CollectorSnapshot["engineCache"];
     timeline: CollectorSnapshot["markers"];
     droppedMarkers: number;
     /** Which scene each timeline number refers to. See `SceneRecord`. */
@@ -213,6 +221,7 @@ export function buildReport(input: BuildReportInput): PerformanceReport {
             entries,
         },
         retained: snapshot.retained,
+        engineCache: snapshot.engineCache,
         timeline: snapshot.markers,
         droppedMarkers: snapshot.droppedMarkers,
         scenes: snapshot.scenes,
@@ -331,6 +340,19 @@ export function formatReportText(report: PerformanceReport): string {
         const bucket = report.retained.byKind[kind];
         if (bucket.blobs > 0) {
             push(`    ${padEnd(kind, 9)} ${padStart(String(bucket.blobs), 5)}  ${formatBytes(bucket.bytes)}`);
+        }
+    }
+    if (report.engineCache) {
+        push(
+            `  engine image cache: ${report.engineCache.entries} tracked, `
+            + `${formatBytes(report.engineCache.blobBytes)} fetched, `
+            + `${formatBytes(report.engineCache.decodedBytes)} decoded, `
+            + `${report.engineCache.pinned} pinned`,
+        );
+        if (hostOwnsImageBytes(report.engineCache)) {
+            // Said in the report as well as on the panel: a reader who only ever sees the text is
+            // the one most likely to take the zero above at face value.
+            push("    the host serves this game's assets, so the object-URL figures above do not apply");
         }
     }
 

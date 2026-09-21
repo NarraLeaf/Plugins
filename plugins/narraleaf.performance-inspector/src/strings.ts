@@ -44,6 +44,16 @@ export type OverlayStrings = {
     heapLimit: string;
     heldInMemory: string;
     heldExplain: string;
+    engineCache: string;
+    engineCacheExplain: string;
+    engineCacheUnavailable: string;
+    engineEntries: string;
+    engineFetched: string;
+    engineDecoded: string;
+    enginePinned: string;
+    engineHostOwned: string;
+    ofBudget: (share: string) => string;
+    noLimit: string;
     assetsSummary: string;
     repeatFetches: string;
     decodeTime: string;
@@ -128,6 +138,16 @@ const EN: OverlayStrings = {
     heapLimit: "Limit",
     heldInMemory: "Held in memory",
     heldExplain: "Payloads the game is still holding through a live object URL, by kind.",
+    engineCache: "Engine image cache",
+    engineCacheExplain: "What the engine itself reports holding, which is the only view that covers both halves.",
+    engineCacheUnavailable: "This build cannot ask the engine; the panel above is all there is.",
+    engineEntries: "Images tracked",
+    engineFetched: "Bytes fetched",
+    engineDecoded: "Bitmaps decoded",
+    enginePinned: "Pinned",
+    engineHostOwned: "The host serves this game's assets, so the engine holds urls rather than bytes — the object-URL figures above do not apply here. What still costs memory is the decoded row.",
+    ofBudget: (share: string) => `${share} of budget`,
+    noLimit: "no limit set",
     assetsSummary: "Assets loaded",
     repeatFetches: "Re-fetched",
     decodeTime: "Decoding",
@@ -203,6 +223,16 @@ const ZH: OverlayStrings = {
     heapLimit: "上限",
     heldInMemory: "驻留内存",
     heldExplain: "仍被存活的 object URL 持有的负载，按类型分。",
+    engineCache: "引擎图像缓存",
+    engineCacheExplain: "引擎自己报告的持有量，也是唯一能同时看到两半的视角。",
+    engineCacheUnavailable: "此构建无法向引擎询问，只有上面那一栏。",
+    engineEntries: "跟踪的图片",
+    engineFetched: "取回的字节",
+    engineDecoded: "已解码位图",
+    enginePinned: "钉住",
+    engineHostOwned: "该游戏的素材由宿主提供，引擎持有的是地址而不是字节——上面那栏 object URL 的数字在这里不适用。真正占内存的是「已解码位图」这一行。",
+    ofBudget: (share: string) => `占预算 ${share}`,
+    noLimit: "未设上限",
     assetsSummary: "已加载资产",
     repeatFetches: "重复取回",
     decodeTime: "解码",
@@ -278,6 +308,16 @@ const JA: OverlayStrings = {
     heapLimit: "上限",
     heldInMemory: "メモリ保持",
     heldExplain: "生きているオブジェクト URL がまだ保持しているデータを種類別に表示します。",
+    engineCache: "エンジンの画像キャッシュ",
+    engineCacheExplain: "エンジン自身が報告する保持量。両方の半分を同時に見られる唯一の視点です。",
+    engineCacheUnavailable: "このビルドではエンジンに問い合わせられません。上の欄がすべてです。",
+    engineEntries: "追跡中の画像",
+    engineFetched: "取得したバイト数",
+    engineDecoded: "デコード済みビットマップ",
+    enginePinned: "固定",
+    engineHostOwned: "このゲームのアセットはホストが配信しているため、エンジンが持つのはバイトではなく URL です。上の object URL の数値はここには当てはまりません。実際にメモリを使うのは「デコード済みビットマップ」の行です。",
+    ofBudget: (share: string) => `予算の ${share}`,
+    noLimit: "上限なし",
     assetsSummary: "読み込んだアセット",
     repeatFetches: "再取得",
     decodeTime: "デコード",
