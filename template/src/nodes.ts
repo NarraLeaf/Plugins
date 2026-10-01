@@ -7,15 +7,15 @@
  * where only `type` and `execute` are read. One definition, no drift.
  *
  * It only typechecks because `narraleaf-studio/plugin` and
- * `narraleaf-studio/runtime` share one set of declarations — a `BlueprintNodeDef`
+ * `narraleaf-studio/runtime` share one set of declarations — a `PluginBlueprintNodeDef`
  * is accepted where a `RuntimeBlueprintNodeDef` is expected.
  */
 
-import type { BlueprintNodeDef } from "narraleaf-studio/plugin";
+import type { PluginBlueprintNodeDef } from "narraleaf-studio/plugin";
 
 export const PLUGIN_ID = "example.starter";
 
-export function createStarterNodes(): BlueprintNodeDef[] {
+export function createStarterNodes(): PluginBlueprintNodeDef[] {
     return [
         {
             // Every contributed type must be prefixed with the plugin id and

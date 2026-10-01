@@ -192,7 +192,7 @@ __metadata:
   resolution: "@narraleaf-plugins/nekolang-i18n@workspace:."
   dependencies:
     esbuild: "npm:^0.25.0"
-    narraleaf-studio: "npm:^0.2.0"
+    narraleaf-studio: "npm:^1.0.0"
     typescript: "npm:^5.7.0"
   languageName: unknown
   linkType: soft
@@ -320,14 +320,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"narraleaf-studio@npm:^0.2.0":
-  version: 0.2.0
-  resolution: "narraleaf-studio@npm:0.2.0"
+"narraleaf-studio@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "narraleaf-studio@npm:1.0.0"
   dependencies:
     "@types/node": "npm:^24.8.1"
     "@types/react": "npm:^19.2.0"
     lucide-react: "npm:^0.546.0"
-  checksum: 10c0/4791c724a5df88f76e47f75095efc56b3d0b27c8a404d1c0e8404681e71937cc3554f25253ded7454efe3018c664bc1339cc3128b391236d1142265c5eb583ad
+  checksum: 10c0/6b91eadb3dd05a00a1f12d14d0ab221cecf0341ec0ceea082bfae818e541c529b104ff1fdcda042cdcab5d567515a2f9fb9d52e6ecfb1674657fe2bdab56e431
   languageName: node
   linkType: hard
 
