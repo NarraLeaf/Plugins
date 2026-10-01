@@ -41,11 +41,18 @@ Studio 的 `catalog/zh` 有增删，都要重新生成一次：
    `console` / `crash` / `dashboard` / `developer` / `devMode` / `dialogs` /
    `dictionary` / `documents` / `game` / `help` / `launcher` / `menu` / `onboarding` /
    `placeholders` / `plugins` / `pluginPermission` / `project` / `projectTrust` /
-   `serverTrust` / `settings` / `update` / `welcome` / `wizard` / `workspace`；
-4. 校对 `{placeholder}` 占位符与中文源一致 —— 漏掉一个就是运行时空洞；
+   `serverSession` / `serverTrust` / `settings` / `update` / `welcome` / `wizard` /
+   `workspace`；
+4. 校对 `{placeholder}` 占位符与中文源一致 —— 漏掉一个就是运行时空洞。键名照 Studio
+   的写：计数文案是复数组，键名带 `.other`（中文只用这一档）；只有 `foo` 没有
+   `foo.other` 时，`tn()` 找不到它，读者看到的是英文；
 5. 校对术语：中文源写「资产」的地方猫娘译文也得写「资产」，「工程」一个都不许出现
-   （Studio 的中文里它已经清零了）。专有名词、平台名、URL 与被 `{type}` 插值的片段
-   （`dialogs.noun.*`）保持原样，不要加「喵」—— 加了就会双份。
+   （Studio 的中文里它已经清零了）。专有名词、平台名、URL 与被插值进别的句子的片段
+   保持原样，不要加「喵」—— 加了就会出现在句子中间或者双份。这类片段包括
+   `{type}` 名词（`dialogs.noun.*`）、计数片段（`common.count.*`、
+   `assets.magicTag.tagCount` 这类被 `tn()` 算好再塞进 `{errors}`、`{tags}` 的键）、
+   存储名（`workspace.shell.save.stores.*`）和只负责拼接的模板（`{headline}；{reason}`）；
+   「喵」由拼接它们的那句话来说。
 - `build.mjs` 在打包时把 `locales/*.json` 一并拷入 `dist/`（模板的构建脚本只拷贝入口
   与清单，语言文件是数据、需要额外拷贝）。
 
