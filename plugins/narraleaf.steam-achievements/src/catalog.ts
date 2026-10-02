@@ -9,6 +9,8 @@
  * (locale codes, wire formats) is spelled out literally.
  */
 
+import { translateEnglish, type Translate } from "./i18n";
+
 export const PLUGIN_ID = "narraleaf.steam-achievements";
 
 /**
@@ -276,8 +278,11 @@ export type CatalogIssue = {
  * Errors are things Steam will reject or that make a node unrunnable; warnings
  * are things that ship but read badly (an achievement with no text in a language
  * the game is released in shows up blank in the Steam overlay).
+ *
+ * `t` words the messages; the editor tab passes its translator, so they read in
+ * the editor's language.
  */
-export function validateCatalog(catalog: AchievementCatalog): CatalogIssue[] {
+export function validateCatalog(catalog: AchievementCatalog, t: Translate = translateEnglish): CatalogIssue[] {
     const issues: CatalogIssue[] = [];
     const seenAchievements = new Set<string>();
     const seenStats = new Set<string>();
@@ -287,15 +292,15 @@ export function validateCatalog(catalog: AchievementCatalog): CatalogIssue[] {
             issues.push({
                 severity: "error",
                 subjectId: stat.id,
-                message: `Stat API Name "${stat.id}" must match A-Z a-z 0-9 _ (1-44 characters)`,
+                message: t("issue.statApiName", { id: stat.id }),
             });
         }
         if (seenStats.has(stat.id)) {
-            issues.push({ severity: "error", subjectId: stat.id, message: `Duplicate stat "${stat.id}"` });
+            issues.push({ severity: "error", subjectId: stat.id, message: t("issue.statDuplicate", { id: stat.id }) });
         }
         seenStats.add(stat.id);
         if (stat.min !== undefined && stat.max !== undefined && stat.min > stat.max) {
-            issues.push({ severity: "error", subjectId: stat.id, message: `Stat "${stat.id}" has min above max` });
+            issues.push({ severity: "error", subjectId: stat.id, message: t("issue.statRange", { id: stat.id }) });
         }
     }
 
@@ -304,14 +309,14 @@ export function validateCatalog(catalog: AchievementCatalog): CatalogIssue[] {
             issues.push({
                 severity: "error",
                 subjectId: achievement.id,
-                message: `API Name "${achievement.id}" must match A-Z a-z 0-9 _ (1-44 characters)`,
+                message: t("issue.apiName", { id: achievement.id }),
             });
         }
         if (seenAchievements.has(achievement.id)) {
             issues.push({
                 severity: "error",
                 subjectId: achievement.id,
-                message: `Duplicate API Name "${achievement.id}"`,
+                message: t("issue.duplicate", { id: achievement.id }),
             });
         }
         seenAchievements.add(achievement.id);
@@ -321,14 +326,14 @@ export function validateCatalog(catalog: AchievementCatalog): CatalogIssue[] {
                 issues.push({
                     severity: "error",
                     subjectId: achievement.id,
-                    message: `Progress references unknown stat "${achievement.progress.statId}"`,
+                    message: t("issue.progressUnknownStat", { id: achievement.progress.statId }),
                 });
             }
             if (!(achievement.progress.max > 0)) {
                 issues.push({
                     severity: "error",
                     subjectId: achievement.id,
-                    message: "Progress max must be above zero",
+                    message: t("issue.progressMax"),
                 });
             }
         }
@@ -338,21 +343,21 @@ export function validateCatalog(catalog: AchievementCatalog): CatalogIssue[] {
                 issues.push({
                     severity: "warning",
                     subjectId: achievement.id,
-                    message: `Missing name for ${locale}`,
+                    message: t("issue.missingName", { locale }),
                 });
             }
             if (!readTrimmed(achievement.description[locale])) {
                 issues.push({
                     severity: "warning",
                     subjectId: achievement.id,
-                    message: `Missing description for ${locale}`,
+                    message: t("issue.missingDescription", { locale }),
                 });
             }
         }
     }
 
     if (catalog.achievements.length > 0 && !catalog.appId) {
-        issues.push({ severity: "warning", message: "No Steam App ID set" });
+        issues.push({ severity: "warning", message: t("issue.noAppId") });
     }
 
     return issues;

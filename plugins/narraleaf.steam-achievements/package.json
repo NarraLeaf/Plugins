@@ -38,7 +38,7 @@
     "locales": {
       "zh-CN": {
         "name": "Steam 成就",
-        "description": "在 Studio 里编写 Steam 成就与统计量，并用蓝图节点解锁。Steam 不可用时写入本地镜像，itch 版、web 版与 Dev Mode 下同一套脚本照常工作。"
+        "description": "在 Studio 中编辑 Steam 成就与统计数据，并通过蓝图节点解锁成就；Steam 不可用时自动改用本地镜像，itch、Web 导出与开发模式可共用同一套蓝图逻辑"
       }
     }
   }
