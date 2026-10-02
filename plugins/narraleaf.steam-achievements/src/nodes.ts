@@ -11,6 +11,13 @@
  *
  * The whole of a node's reach is `ctx.game` — the capability-gated surface the
  * manifest declared. There is no `hostAdapter` here, by construction.
+ *
+ * Labels are worded by the `Translate` the caller passes: the studio entry hands
+ * in the editor's translator, the runtime entry takes the English default. A node
+ * definition cannot be registered twice, so the palette keeps the language Studio
+ * had when the plugin loaded. What a node says while it runs (the `Error` pin, the
+ * game log) stays in English: it is read by the author in a log, and the game has
+ * no editor language to follow.
  */
 
 import type { PluginBlueprintNodeDef } from "narraleaf-studio/plugin";
@@ -33,6 +40,7 @@ import {
     writeUnlocked,
     type ExecuteCtx,
 } from "./bridge";
+import { translateEnglish, type Translate } from "./i18n";
 
 export { PLUGIN_ID, CATALOG_NAMESPACE, SIDECAR_ID } from "./catalog";
 
@@ -74,45 +82,54 @@ const APP_ID_PATTERN = /^\d+$/;
 /** Reads the authored catalog. Target-specific; see the module comment. */
 export type CatalogReader = () => unknown;
 
-const execIn = { id: "in", kind: "input", semantic: "exec", label: "In" } as const;
-const execNext = { id: "next", kind: "output", semantic: "exec", label: "Next" } as const;
+function execIn(t: Translate) {
+    return { id: "in", kind: "input", semantic: "exec", label: t("pin.in") } as const;
+}
+
+function execNext(t: Translate) {
+    return { id: "next", kind: "output", semantic: "exec", label: t("pin.next") } as const;
+}
 
 /**
  * Optional overrides for the inspector pickers. Without them an achievement can
  * only be chosen at author time, which makes any loop — an in-game achievement
  * gallery, a "grant everything" debug menu — impossible to write.
  */
-const achievementIdIn = {
-    id: PIN_ACHIEVEMENT_ID,
-    kind: "input",
-    semantic: "data",
-    valueType: "string",
-    label: "Achievement Id",
-    optional: true,
-} as const;
+function achievementIdIn(t: Translate) {
+    return {
+        id: PIN_ACHIEVEMENT_ID,
+        kind: "input",
+        semantic: "data",
+        valueType: "string",
+        label: t("pin.achievementId"),
+        optional: true,
+    } as const;
+}
 
-const statIdIn = {
-    id: PIN_STAT_ID,
-    kind: "input",
-    semantic: "data",
-    valueType: "string",
-    label: "Stat Id",
-    optional: true,
-} as const;
+function statIdIn(t: Translate) {
+    return {
+        id: PIN_STAT_ID,
+        kind: "input",
+        semantic: "data",
+        valueType: "string",
+        label: t("pin.statId"),
+        optional: true,
+    } as const;
+}
 
-function achievementParam() {
+function achievementParam(t: Translate) {
     return {
         key: PARAM_ACHIEVEMENT,
-        label: "Achievement",
+        label: t("param.achievement"),
         kind: "select" as const,
         dynamicOptionsSource: ACHIEVEMENT_OPTIONS_SOURCE,
     };
 }
 
-function statParam() {
+function statParam(t: Translate) {
     return {
         key: PARAM_STAT,
-        label: "Stat",
+        label: t("param.stat"),
         kind: "select" as const,
         dynamicOptionsSource: STAT_OPTIONS_SOURCE,
     };
@@ -147,7 +164,10 @@ function resolveStatId(ctx: ExecuteCtx): string {
     return id;
 }
 
-export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginBlueprintNodeDef[] {
+export function createSteamAchievementNodes(
+    readCatalog: CatalogReader,
+    t: Translate = translateEnglish,
+): PluginBlueprintNodeDef[] {
     const catalog = (): AchievementCatalog => normalizeCatalog(readCatalog());
 
     /**
@@ -194,14 +214,14 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
     return [
         {
             type: `${PLUGIN_ID}.unlock`,
-            displayName: "Unlock Achievement",
+            displayName: t("node.unlock"),
             category: CATEGORY,
             keywords: ["steam", "achievement", "unlock", "award"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
-            pins: [execIn, achievementIdIn, execNext],
-            inspectorParams: [achievementParam()],
+            pins: [execIn(t), achievementIdIn(t), execNext(t)],
+            inspectorParams: [achievementParam(t)],
             execute: async ctx => {
                 const id = resolveAchievementId(ctx);
                 const unlocked = await readUnlocked(ctx.game);
@@ -213,19 +233,19 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.isUnlocked`,
-            displayName: "Is Achievement Unlocked",
+            displayName: t("node.isUnlocked"),
             category: CATEGORY,
             keywords: ["steam", "achievement", "unlocked", "has"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                achievementIdIn,
-                execNext,
-                { id: "unlocked", kind: "output", semantic: "data", valueType: "boolean", label: "Unlocked" },
+                execIn(t),
+                achievementIdIn(t),
+                execNext(t),
+                { id: "unlocked", kind: "output", semantic: "data", valueType: "boolean", label: t("pin.unlocked") },
             ],
-            inspectorParams: [achievementParam()],
+            inspectorParams: [achievementParam(t)],
             // Reads the mirror, never Steam: the answer must be the same on every
             // target, and it must not depend on a child process being alive.
             execute: async ctx => ({
@@ -235,21 +255,21 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.indicateProgress`,
-            displayName: "Indicate Achievement Progress",
+            displayName: t("node.indicateProgress"),
             category: CATEGORY,
             keywords: ["steam", "achievement", "progress", "toast"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                achievementIdIn,
+                execIn(t),
+                achievementIdIn(t),
                 {
                     id: PIN_CURRENT,
                     kind: "input",
                     semantic: "data",
                     valueType: "integer",
-                    label: "Current",
+                    label: t("pin.current"),
                     allowInlineLiteral: true,
                 },
                 {
@@ -257,13 +277,13 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
                     kind: "input",
                     semantic: "data",
                     valueType: "integer",
-                    label: "Max",
+                    label: t("pin.max"),
                     allowInlineLiteral: true,
                     optional: true,
                 },
-                execNext,
+                execNext(t),
             ],
-            inspectorParams: [achievementParam()],
+            inspectorParams: [achievementParam(t)],
             execute: async ctx => {
                 const id = resolveAchievementId(ctx);
                 const authored = catalog().achievements.find(item => item.id === id)?.progress;
@@ -282,27 +302,27 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.setStat`,
-            displayName: "Set Stat",
+            displayName: t("node.setStat"),
             category: CATEGORY,
             keywords: ["steam", "stat", "set"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                statIdIn,
+                execIn(t),
+                statIdIn(t),
                 {
                     id: PIN_VALUE,
                     kind: "input",
                     semantic: "data",
                     valueType: "float",
-                    label: "Value",
+                    label: t("pin.value"),
                     allowInlineLiteral: true,
                 },
-                execNext,
-                { id: "result", kind: "output", semantic: "data", valueType: "float", label: "Value" },
+                execNext(t),
+                { id: "result", kind: "output", semantic: "data", valueType: "float", label: t("pin.value") },
             ],
-            inspectorParams: [statParam()],
+            inspectorParams: [statParam(t)],
             execute: async ctx => ({
                 nextPort: "next",
                 outputValues: {
@@ -312,27 +332,27 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.addStat`,
-            displayName: "Add Stat",
+            displayName: t("node.addStat"),
             category: CATEGORY,
             keywords: ["steam", "stat", "add", "increment"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                statIdIn,
+                execIn(t),
+                statIdIn(t),
                 {
                     id: PIN_VALUE,
                     kind: "input",
                     semantic: "data",
                     valueType: "float",
-                    label: "Delta",
+                    label: t("pin.delta"),
                     allowInlineLiteral: true,
                 },
-                execNext,
-                { id: "result", kind: "output", semantic: "data", valueType: "float", label: "Value" },
+                execNext(t),
+                { id: "result", kind: "output", semantic: "data", valueType: "float", label: t("pin.value") },
             ],
-            inspectorParams: [statParam()],
+            inspectorParams: [statParam(t)],
             execute: async ctx => ({
                 nextPort: "next",
                 outputValues: {
@@ -346,19 +366,19 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.getStat`,
-            displayName: "Get Stat",
+            displayName: t("node.getStat"),
             category: CATEGORY,
             keywords: ["steam", "stat", "get", "read"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                statIdIn,
-                execNext,
-                { id: "result", kind: "output", semantic: "data", valueType: "float", label: "Value" },
+                execIn(t),
+                statIdIn(t),
+                execNext(t),
+                { id: "result", kind: "output", semantic: "data", valueType: "float", label: t("pin.value") },
             ],
-            inspectorParams: [statParam()],
+            inspectorParams: [statParam(t)],
             execute: async ctx => {
                 const statId = resolveStatId(ctx);
                 const values = await readStats(ctx.game);
@@ -372,17 +392,17 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.available`,
-            displayName: "Steam Available",
+            displayName: t("node.available"),
             category: CATEGORY,
             keywords: ["steam", "available", "running", "detect"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                execNext,
-                { id: "available", kind: "output", semantic: "data", valueType: "boolean", label: "Available" },
-                { id: "appId", kind: "output", semantic: "data", valueType: "string", label: "App Id" },
+                execIn(t),
+                execNext(t),
+                { id: "available", kind: "output", semantic: "data", valueType: "boolean", label: t("pin.available") },
+                { id: "appId", kind: "output", semantic: "data", valueType: "string", label: t("pin.appId") },
             ],
             // False whenever the bridge is missing or SteamAPI_Init failed —
             // web, mobile, an undeclared desktop arch, or Steam simply not running.
@@ -396,16 +416,16 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.language`,
-            displayName: "Steam Language",
+            displayName: t("node.language"),
             category: CATEGORY,
             keywords: ["steam", "language", "locale"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                execNext,
-                { id: "language", kind: "output", semantic: "data", valueType: "string", label: "Language" },
+                execIn(t),
+                execNext(t),
+                { id: "language", kind: "output", semantic: "data", valueType: "string", label: t("pin.language") },
             ],
             // Steam's own spelling ("english", "schinese"), not a BCP-47 tag —
             // map it in the graph rather than assuming it matches a game locale.
@@ -416,7 +436,7 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.openStorePage`,
-            displayName: "Open Store Page",
+            displayName: t("node.openStorePage"),
             category: CATEGORY,
             keywords: [
                 "steam", "store", "page", "link", "open", "buy", "wishlist", "demo", "dlc",
@@ -425,17 +445,17 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                execNext,
-                { id: "failed", kind: "output", semantic: "exec", label: "Failed" },
-                { id: "error", kind: "output", semantic: "data", valueType: "string", label: "Error" },
+                execIn(t),
+                execNext(t),
+                { id: "failed", kind: "output", semantic: "exec", label: t("pin.failed") },
+                { id: "error", kind: "output", semantic: "data", valueType: "string", label: t("pin.error") },
             ],
             // Blank opens this build's own page, which is what it always did. Filled in, it opens
             // that app's - which is how a "buy the extra chapter" button reaches the DLC's page
             // rather than the game's.
             inspectorParams: [{
                 key: PARAM_APP_ID,
-                label: "App ID",
+                label: t("param.appId"),
                 kind: "string" as const,
             }],
             execute: async ctx => {
@@ -484,21 +504,21 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.ownsDlc`,
-            displayName: "Owns DLC",
+            displayName: t("node.ownsDlc"),
             category: CATEGORY,
             keywords: ["steam", "dlc", "owns", "owned", "bought", "purchased", "entitlement", "addon"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
-                { id: "owned", kind: "output", semantic: "exec", label: "Owned" },
-                { id: "notOwned", kind: "output", semantic: "exec", label: "Not Owned" },
-                { id: "isOwned", kind: "output", semantic: "data", valueType: "boolean", label: "Is Owned" },
+                execIn(t),
+                { id: "owned", kind: "output", semantic: "exec", label: t("pin.owned") },
+                { id: "notOwned", kind: "output", semantic: "exec", label: t("pin.notOwned") },
+                { id: "isOwned", kind: "output", semantic: "data", valueType: "boolean", label: t("pin.isOwned") },
             ],
             inspectorParams: [{
                 key: PARAM_APP_ID,
-                label: "DLC App ID",
+                label: t("param.dlcAppId"),
                 kind: "string" as const,
             }],
             /**
@@ -539,24 +559,24 @@ export function createSteamAchievementNodes(readCatalog: CatalogReader): PluginB
         },
         {
             type: `${PLUGIN_ID}.resetAll`,
-            displayName: "Reset All Stats",
+            displayName: t("node.resetAll"),
             category: CATEGORY,
             keywords: ["steam", "stat", "achievement", "reset", "clear", "debug"],
             graphKinds: ["event", "macro"],
             isPure: false,
             isLatent: true,
             pins: [
-                execIn,
+                execIn(t),
                 {
                     id: PIN_ALSO_ACHIEVEMENTS,
                     kind: "input",
                     semantic: "data",
                     valueType: "boolean",
-                    label: "Also Achievements",
+                    label: t("pin.alsoAchievements"),
                     allowInlineLiteral: true,
                     optional: true,
                 },
-                execNext,
+                execNext(t),
             ],
             execute: async ctx => {
                 const alsoAchievements = ctx.resolveInput?.(PIN_ALSO_ACHIEVEMENTS) === true;
