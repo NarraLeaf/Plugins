@@ -31,8 +31,11 @@ export const INDEX_FORMAT_VERSION = 1;
 /** Studio only understands manifestVersion 2. v1 is hard-rejected at install. */
 export const PLUGIN_MANIFEST_VERSION = 2;
 export const PLUGIN_ENTRY_TARGETS = ["studio", "runtime"];
-/** Contribution kinds whose value is an array of `<pluginId>.`-prefixed type strings. */
-export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets", "runtimeData", "tests"];
+/**
+ * Contribution kinds whose value is an array of `<pluginId>.`-prefixed strings. `reservedSaveIds`
+ * names save ids the plugin keeps for itself, which Studio leaves out of the player's save list.
+ */
+export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets", "runtimeData", "tests", "reservedSaveIds"];
 /** Every recognized contributes key, including the object-shaped ones. */
 export const PLUGIN_CONTRIBUTES_KEYS = [
     ...PLUGIN_CONTRIBUTES_TYPE_KEYS,

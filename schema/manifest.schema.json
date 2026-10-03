@@ -68,6 +68,11 @@
           "items": { "type": "string", "minLength": 1 },
           "description": "Tests the plugin adds to Run > Test, each prefixed with the plugin id. Alone among the code-backed contributions this asks for nothing at install: a test runs only because the author opened the dialog and started it, and what it may reach while running is gated by its own requires."
         },
+        "reservedSaveIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Save ids the plugin keeps for itself, each prefixed with the plugin id. Studio leaves them out of the player's save list (List Saves, the Dev Mode saves panel), while nodes that name the id directly still reach it. Asks for nothing at install."
+        },
         "locales": {
           "type": "array",
           "items": { "$ref": "#/definitions/localeContribution" },
