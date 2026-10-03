@@ -101,6 +101,7 @@ export const PLUGIN_RUNTIME_CAPABILITIES = [
     "menu",
     "story.compile",
     "diagnostics",
+    "process.memory",
 ];
 
 /**
