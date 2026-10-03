@@ -45,6 +45,7 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
     "buildDependencies",
     "buildConfig",
     "externalLinks",
+    "network",
 ];
 
 /**
@@ -63,6 +64,13 @@ export const EXTERNAL_LINK_PATTERN_DENIED_SCHEMES = [
     "vbscript:",
     "file:",
 ];
+
+/**
+ * Schemes a `contributes.network` pattern may name. Studio's `NETWORK_ALLOWLIST_SCHEMES` in
+ * src/shared/types/networkAllowlist.ts: the Fetch node reaches no others, so neither does a
+ * declaration of where a plugin fetches from.
+ */
+export const NETWORK_PATTERN_SCHEMES = ["http:", "https:"];
 
 /** How a build config value is typed. `secret` is stored on the author's machine, not in the project. */
 export const PLUGIN_BUILD_CONFIG_TYPES = ["text", "secret"];
@@ -579,6 +587,66 @@ function validateExternalLinks(value, pluginId, errors) {
     return value.length;
 }
 
+/**
+ * Address patterns the plugin fetches from. Returns the number declared; pushes
+ * any problems onto `errors`.
+ *
+ * A port of Studio's `validateNetworkPatterns`. The external-link rules apply and
+ * two more sit on top, both because what comes back from a fetch runs inside the
+ * game while an opened page does not:
+ *
+ *  - `http(s)` only. There is no storefront scheme to make room for here.
+ *  - A host, and a written path. `https://api.example.com` is a pattern whose
+ *    path is exactly `/`, which is almost never what an author fetching from an
+ *    API meant - so it is refused with the spelling that does mean it rather
+ *    than rewritten into it. The manifest text and the text the author approves
+ *    at install have to be the same string.
+ */
+function validateNetworkPatterns(value, pluginId, errors) {
+    if (value === undefined) {
+        return 0;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.network must be an array of address patterns");
+        return 0;
+    }
+    const seen = new Set();
+    for (const item of value) {
+        const pattern = typeof item === "string" ? item.trim() : "";
+        if (!pattern) {
+            errors.push(`contributes.network entries must be non-empty strings (plugin "${pluginId}")`);
+            continue;
+        }
+        const key = externalLinkPatternKey(pattern);
+        if (!key) {
+            errors.push(`contributes.network entry is not an address pattern: ${pattern}. `
+                + "It must be absolute, must not carry credentials, and may use `*` only as a "
+                + "whole leading host label");
+            continue;
+        }
+        // A pattern with a key is one the URL parser took, so this cannot throw.
+        const parsed = new URL(pattern);
+        if (!NETWORK_PATTERN_SCHEMES.includes(parsed.protocol.toLowerCase())) {
+            errors.push(`contributes.network entry must be http or https: ${pattern}`);
+            continue;
+        }
+        if (!parsed.hostname || parsed.hostname === "*") {
+            errors.push(`contributes.network entry must name a host: ${pattern}`);
+            continue;
+        }
+        if (parsed.pathname === "/" && !parsed.search && !parsed.hash) {
+            errors.push(`contributes.network entry "${pattern}" names only the path "/". `
+                + `Write "${parsed.protocol}//${parsed.host}/*" for the whole host.`);
+            continue;
+        }
+        if (seen.has(key)) {
+            errors.push(`contributes.network declares "${pattern}" more than once`);
+        }
+        seen.add(key);
+    }
+    return value.length;
+}
+
 /** Returns the number of declared sidecars; pushes any problems onto `errors`. */
 function validateSidecars(value, pluginId, dependencyIds, errors) {
     if (value === undefined) {
@@ -838,6 +906,7 @@ export function validatePluginManifest(value) {
             const sidecars = validateSidecars(value.contributes.sidecars, id, dependencyIds, errors);
             validateBuildConfig(value.contributes.buildConfig, id, errors);
             const externalLinks = validateExternalLinks(value.contributes.externalLinks, id, errors);
+            const network = validateNetworkPatterns(value.contributes.network, id, errors);
 
             // Capabilities, sidecars and addresses are powers of the *runtime*
             // entry. Declaring them without one asks the user to approve
@@ -851,6 +920,9 @@ export function validatePluginManifest(value) {
                 }
                 if (externalLinks > 0) {
                     errors.push("contributes.externalLinks requires a runtime entry");
+                }
+                if (network > 0) {
+                    errors.push("contributes.network requires a runtime entry");
                 }
             }
         }

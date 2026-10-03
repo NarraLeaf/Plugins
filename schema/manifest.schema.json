@@ -115,12 +115,17 @@
           "type": "array",
           "items": { "$ref": "#/definitions/externalLinkPattern" },
           "description": "Address patterns the plugin may hand to the player's browser or platform handler. Requires a runtime entry. The whole list becomes one install permission the author reads verbatim, so a pattern that could never match would be approved as a power and then be none."
+        },
+        "network": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/networkPattern" },
+          "description": "Address patterns the plugin fetches from. Requires a runtime entry. The list becomes its own install permission, apart from externalLinks, because what these hosts send back runs inside the game; a project that limits its network access to a list gets these added to it, attributed to the plugin."
         }
       }
     },
     "permissions": {
       "type": "array",
-      "description": "Shown to the user at install time. Request the minimum. Only filesystem and api are written here: runtime, sidecar, buildDependency and externalLink are derived from contributes and refused when hand-written, which is what keeps the prompt and the plugin's real reach from drifting apart.",
+      "description": "Shown to the user at install time. Request the minimum. Only filesystem and api are written here: runtime, sidecar, buildDependency, externalLink and network are derived from contributes and refused when hand-written, which is what keeps the prompt and the plugin's real reach from drifting apart.",
       "items": {
         "oneOf": [
           {
@@ -318,6 +323,18 @@
         "pattern": "^([jJ][aA][vV][aA][sS][cC][rR][iI][pP][tT]|[dD][aA][tT][aA]|[vV][bB][sS][cC][rR][iI][pP][tT]|[fF][iI][lL][eE]):"
       },
       "description": "Absolute and naming a scheme, carrying no credentials, using * only as a whole leading host label or as the entire host. javascript:, data: and vbscript: are not addresses at all — handing one to the platform opener is how \"open a link\" becomes \"run this\" — and file: opens whatever handler the file is registered to, which for an executable is the same thing. The parts of this a pattern cannot express are checked by scripts/validate.mjs."
+    },
+    "networkPattern": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\s*[hH][tT][tT][pP][sS]?:",
+      "not": {
+        "anyOf": [
+          { "pattern": "^\\s*[hH][tT][tT][pP][sS]?://\\*(:[0-9]*)?([/?#\\\\]|\\s*$)" },
+          { "pattern": "^\\s*[hH][tT][tT][pP][sS]?://[^/?#\\\\]*/?\\s*$" }
+        ]
+      },
+      "description": "An external link pattern with two more rules, because what a fetch brings back runs inside the game: http or https only, and a named host with a written path. https://api.example.com/* is the whole host; https://api.example.com is refused, because its path is exactly \"/\" and that is almost never what was meant. * may lead the host as a whole label (https://*.example.com/*) but may not be the host. The parts of this a pattern cannot express are checked by scripts/validate.mjs."
     },
     "binaryPlatformKey": {
       "pattern": "^(windows|macos|linux)-(x64|arm64)$|^macos-universal$",
