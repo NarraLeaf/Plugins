@@ -776,6 +776,44 @@ function validateSidecars(value, pluginId, dependencyIds, errors) {
 }
 
 /**
+ * The plugin's name and description in the editor's languages. Pushes any
+ * problems onto `errors`. A port of Studio's `validateLocalized`.
+ *
+ * Keys use the locale-code shape of `contributes.locales`, which is every code
+ * Studio's language setting can hold. An entry that translates neither field is
+ * refused rather than dropped: it is almost always a misspelt key (`title`,
+ * `desc`), and dropping it would leave the author wondering why the plugin list
+ * still shows the plain name.
+ */
+function validateLocalized(value, errors) {
+    if (value === undefined) {
+        return;
+    }
+    if (!isRecord(value)) {
+        errors.push("localized must be an object keyed by locale code");
+        return;
+    }
+    for (const [code, entry] of Object.entries(value)) {
+        if (!LOCALE_CODE_PATTERN.test(code)) {
+            errors.push(`localized has an invalid locale code: ${code}`);
+            continue;
+        }
+        if (!isRecord(entry)) {
+            errors.push(`localized["${code}"] must be an object with name and/or description`);
+            continue;
+        }
+        const wrongType = ["name", "description"].filter(key => entry[key] !== undefined && typeof entry[key] !== "string");
+        if (wrongType.length) {
+            errors.push(...wrongType.map(key => `localized["${code}"].${key} must be a string`));
+            continue;
+        }
+        if (!readString(entry, "name") && !readString(entry, "description")) {
+            errors.push(`localized["${code}"] must declare a name or a description`);
+        }
+    }
+}
+
+/**
  * Port of Studio's validatePluginManifest.
  * Returns { ok: true, manifest } or { ok: false, errors: string[] }.
  */
@@ -814,6 +852,8 @@ export function validatePluginManifest(value) {
             errors.push(`icon must be one of: ${pluginIconExtensionList()}`);
         }
     }
+
+    validateLocalized(value.localized, errors);
 
     const entries = value.entries;
     if (!isRecord(entries)) {
