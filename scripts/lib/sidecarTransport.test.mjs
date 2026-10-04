@@ -1,10 +1,9 @@
 /**
  * Tests for the sidecar transport name. Run with `node --test scripts/lib/*.test.mjs`.
  *
- * `stdio-jsonl` was the only accepted value until node sidecars moved to a utility process, where
- * the frames travel over the parent port and nothing goes over stdio. The name describes the
- * framing now, and the old spelling has to keep validating: it is written into manifests that were
- * published before the rename, and a validator that refused them would refuse plugins that work.
+ * This port has to refuse exactly what Studio refuses. It once also took `jsonl`, which Studio's
+ * validator has never accepted, and narraleaf.steam-achievements 0.2.0 shipped saying it: green
+ * here, refused at install for everyone.
  */
 
 import assert from "node:assert/strict";
@@ -33,12 +32,14 @@ const withSidecar = sidecar => ({
 const transportErrors = manifest =>
     validatePluginManifest(manifest).errors.filter(error => error.includes("transport"));
 
-test("takes the name that describes the framing", () => {
-    assert.deepEqual(transportErrors(withSidecar({ transport: "jsonl" })), []);
+test("takes the one transport Studio accepts", () => {
+    assert.deepEqual(transportErrors(withSidecar({ transport: "stdio-jsonl" })), []);
 });
 
-test("still takes the spelling published manifests were written with", () => {
-    assert.deepEqual(transportErrors(withSidecar({ transport: "stdio-jsonl" })), []);
+test("refuses jsonl, which Studio refuses at install", () => {
+    assert.deepEqual(transportErrors(withSidecar({ transport: "jsonl" })), [
+        'sidecar "acme.demo.bridge" transport must be "stdio-jsonl"',
+    ]);
 });
 
 test("takes a sidecar that names no transport at all", () => {

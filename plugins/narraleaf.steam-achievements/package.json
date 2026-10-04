@@ -1,8 +1,8 @@
 {
   "name": "@narraleaf-plugins/steam-achievements",
-  "version": "0.1.1",
+  "version": "0.2.1",
   "private": true,
-  "description": "Author Steam achievements and stats in Studio, and unlock them from blueprint graphs, with a local mirror wherever Steam is not available.",
+  "description": "Unlock Steam achievements and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
   "license": "MPL-2.0",
   "type": "module",
   "keywords": [
@@ -34,11 +34,11 @@
       "integration",
       "blueprint"
     ],
-    "studioVersion": ">=0.2.0",
+    "studioVersion": ">=1.0.0",
     "locales": {
       "zh-CN": {
         "name": "Steam 成就",
-        "description": "在 Studio 里编写 Steam 成就与统计量，并用蓝图节点解锁。Steam 不可用时写入本地镜像，itch 版、web 版与 Dev Mode 下同一套脚本照常工作。"
+        "description": "通过蓝图解锁 Steam 成就并更新统计数据。进度保存在玩家设备上，桌面版游戏在 Steam 运行时同步到 Steam"
       }
     }
   }

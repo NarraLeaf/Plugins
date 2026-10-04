@@ -27,6 +27,22 @@
       "description": "Semver. Must match package.json version."
     },
     "description": { "type": "string" },
+    "localized": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$" },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["name"], "properties": { "name": { "pattern": "\\S" } } },
+          { "required": ["description"], "properties": { "description": { "pattern": "\\S" } } }
+        ]
+      },
+      "description": "The name and description in the editor's languages, keyed by Studio's language code: zh, ja. Each field falls back to the plain one on its own, and codes match exactly, so a zh entry does not cover zh-x-neko. An entry must translate at least one of the two. The plain name stays the plugin's identity in command lines, project dependency lists and build logs."
+    },
     "publisher": { "type": "string" },
     "icon": {
       "type": "string",
@@ -68,6 +84,11 @@
           "items": { "type": "string", "minLength": 1 },
           "description": "Tests the plugin adds to Run > Test, each prefixed with the plugin id. Alone among the code-backed contributions this asks for nothing at install: a test runs only because the author opened the dialog and started it, and what it may reach while running is gated by its own requires."
         },
+        "reservedSaveIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Save ids the plugin keeps for itself, each prefixed with the plugin id. Studio leaves them out of the player's save list (List Saves, the Dev Mode saves panel), while nodes that name the id directly still reach it. Asks for nothing at install."
+        },
         "locales": {
           "type": "array",
           "items": { "$ref": "#/definitions/localeContribution" },
@@ -86,7 +107,10 @@
               "ui.overlay",
               "assets",
               "locale",
-              "story.compile"
+              "menu",
+              "story.compile",
+              "diagnostics",
+              "process.memory"
             ]
           },
           "description": "Capability domains the runtime entry may reach. Closed list, so a typo fails validation rather than reading as \"asked for nothing\". Each becomes an install permission, which is why declaring one without a runtime entry is refused: it would ask the user to approve something nothing can use."
@@ -110,12 +134,17 @@
           "type": "array",
           "items": { "$ref": "#/definitions/externalLinkPattern" },
           "description": "Address patterns the plugin may hand to the player's browser or platform handler. Requires a runtime entry. The whole list becomes one install permission the author reads verbatim, so a pattern that could never match would be approved as a power and then be none."
+        },
+        "network": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/networkPattern" },
+          "description": "Address patterns the plugin fetches from. Requires a runtime entry. The list becomes its own install permission, apart from externalLinks, because what these hosts send back runs inside the game; a project that limits its network access to a list gets these added to it, attributed to the plugin."
         }
       }
     },
     "permissions": {
       "type": "array",
-      "description": "Shown to the user at install time. Request the minimum. Only filesystem and api are written here: runtime, sidecar, buildDependency and externalLink are derived from contributes and refused when hand-written, which is what keeps the prompt and the plugin's real reach from drifting apart.",
+      "description": "Shown to the user at install time. Request the minimum. Only filesystem and api are written here: runtime, sidecar, buildDependency, externalLink and network are derived from contributes and refused when hand-written, which is what keeps the prompt and the plugin's real reach from drifting apart.",
       "items": {
         "oneOf": [
           {
@@ -182,9 +211,9 @@
         },
         "kind": { "enum": ["executable", "node"], "default": "executable" },
         "transport": {
-          "enum": ["jsonl", "stdio-jsonl"],
-          "default": "jsonl",
-          "description": "Newline-delimited JSON. The framing, not the channel: executable sidecars use stdio, node sidecars the utility process's parent port. \"stdio-jsonl\" is the older spelling and stays accepted."
+          "enum": ["stdio-jsonl"],
+          "default": "stdio-jsonl",
+          "description": "Newline-delimited JSON. The only value Studio accepts."
         },
         "autostart": { "enum": ["onGameStart", "onRequest"], "default": "onGameStart" },
         "startupTimeoutMs": { "type": "integer", "minimum": 1, "default": 5000 },
@@ -313,6 +342,18 @@
         "pattern": "^([jJ][aA][vV][aA][sS][cC][rR][iI][pP][tT]|[dD][aA][tT][aA]|[vV][bB][sS][cC][rR][iI][pP][tT]|[fF][iI][lL][eE]):"
       },
       "description": "Absolute and naming a scheme, carrying no credentials, using * only as a whole leading host label or as the entire host. javascript:, data: and vbscript: are not addresses at all — handing one to the platform opener is how \"open a link\" becomes \"run this\" — and file: opens whatever handler the file is registered to, which for an executable is the same thing. The parts of this a pattern cannot express are checked by scripts/validate.mjs."
+    },
+    "networkPattern": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\s*[hH][tT][tT][pP][sS]?:",
+      "not": {
+        "anyOf": [
+          { "pattern": "^\\s*[hH][tT][tT][pP][sS]?://\\*(:[0-9]*)?([/?#\\\\]|\\s*$)" },
+          { "pattern": "^\\s*[hH][tT][tT][pP][sS]?://[^/?#\\\\]*/?\\s*$" }
+        ]
+      },
+      "description": "An external link pattern with two more rules, because what a fetch brings back runs inside the game: http or https only, and a named host with a written path. https://api.example.com/* is the whole host; https://api.example.com is refused, because its path is exactly \"/\" and that is almost never what was meant. * may lead the host as a whole label (https://*.example.com/*) but may not be the host. The parts of this a pattern cannot express are checked by scripts/validate.mjs."
     },
     "binaryPlatformKey": {
       "pattern": "^(windows|macos|linux)-(x64|arm64)$|^macos-universal$",
