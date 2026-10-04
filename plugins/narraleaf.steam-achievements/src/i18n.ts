@@ -1,10 +1,9 @@
 /**
  * The plugin's own message tables, handed to `app.services.i18n.createTranslator`.
  *
- * Unrelated to the achievement text the author writes (that lives in the catalog,
- * one entry per locale the game ships) and to Studio's own translations: this only
- * covers the words the plugin itself draws — the editor tab, the catalog checks and
- * the blueprint node labels.
+ * Unrelated to Studio's own translations and to anything a player reads: this only
+ * covers the words the plugin itself draws in the editor — the achievements tab,
+ * the catalog checks and the blueprint node labels.
  *
  * Studio's built-in Chinese locale is `zh`; the aliases exist so a plugin-provided
  * Chinese locale (a language pack keyed `zh-CN`, or the catgirl one) still lands on
@@ -16,25 +15,19 @@ import type { PluginMessageBundle } from "narraleaf-studio/plugin";
 const en = {
     "tab.title": "Achievements",
 
-    "toolbar.appIdPlaceholder": "Steam App ID",
-    "toolbar.searchPlaceholder": "Search achievements...",
-    "toolbar.addLocalePlaceholder": "add locale",
-    "toolbar.removeLocale": "Remove language",
+    "toolbar.appId": "Steam App ID",
+    "toolbar.searchPlaceholder": "Search achievements",
     "toolbar.errors": "{count} errors",
     "toolbar.warnings": "{count} warnings",
-    "toolbar.addAchievement": "Achievement",
 
-    "achievements.icons": "Icons",
+    "notice.steamworks": "Names, descriptions and icons are set in Steamworks. List each achievement here by its API Name in Steamworks.",
+    "notice.sync": "Achievements and stats are saved on the player's device. While Steam is running, preview and desktop builds also send them to Steam, including achievements earned while Steam was closed. Dev Mode, web and mobile builds do not connect to Steam.",
+
+    "achievements.title": "Achievements",
+    "achievements.add": "Achievement",
     "achievements.apiName": "API Name",
-    "achievements.name": "Name ({locale})",
-    "achievements.description": "Description ({locale})",
-    "achievements.hidden": "Hidden",
-    "achievements.progress": "Progress",
-    "achievements.empty": "No achievements.",
-    "achievements.noMatches": "No matches.",
-    "achievements.noProgress": "None",
-    "achievements.unlockedIcon": "Unlocked icon",
-    "achievements.lockedIcon": "Locked icon",
+    "achievements.empty": "No achievements",
+    "achievements.noMatches": "No matches",
     "achievements.delete": "Delete achievement",
 
     "stats.title": "Stats",
@@ -44,8 +37,8 @@ const en = {
     "stats.default": "Default",
     "stats.min": "Min",
     "stats.max": "Max",
-    "stats.incrementOnly": "Inc only",
-    "stats.empty": "No stats.",
+    "stats.incrementOnly": "Increment only",
+    "stats.empty": "No stats",
     "stats.delete": "Delete stat",
 
     "issue.statApiName": "Stat API Name \"{id}\" must match A-Z a-z 0-9 _ (1-44 characters)",
@@ -53,10 +46,6 @@ const en = {
     "issue.statRange": "Stat \"{id}\" has min above max",
     "issue.apiName": "API Name \"{id}\" must match A-Z a-z 0-9 _ (1-44 characters)",
     "issue.duplicate": "Duplicate API Name \"{id}\"",
-    "issue.progressUnknownStat": "Progress references unknown stat \"{id}\"",
-    "issue.progressMax": "Progress max must be above zero",
-    "issue.missingName": "Missing name for {locale}",
-    "issue.missingDescription": "Missing description for {locale}",
     "issue.noAppId": "No Steam App ID set",
 
     "node.unlock": "Unlock Achievement",
@@ -104,25 +93,19 @@ export type Translate = (key: MessageKey, params?: Record<string, string | numbe
 const zh: Record<MessageKey, string> = {
     "tab.title": "成就",
 
-    "toolbar.appIdPlaceholder": "Steam App ID",
+    "toolbar.appId": "Steam App ID",
     "toolbar.searchPlaceholder": "搜索成就",
-    "toolbar.addLocalePlaceholder": "添加语言代码",
-    "toolbar.removeLocale": "移除当前语言",
     "toolbar.errors": "{count} 个错误",
     "toolbar.warnings": "{count} 个警告",
-    "toolbar.addAchievement": "添加成就",
 
-    "achievements.icons": "图标",
+    "notice.steamworks": "成就的名称、描述和图标在 Steamworks 中设置。此处按 Steamworks 中的 API 名称列出每个成就",
+    "notice.sync": "成就与统计数据保存在玩家设备上。Steam 运行时，预览和桌面版游戏会同时写入 Steam，Steam 关闭期间获得的成就也会补写。开发模式、网页版和移动版不连接 Steam",
+
+    "achievements.title": "成就",
+    "achievements.add": "添加成就",
     "achievements.apiName": "API 名称",
-    "achievements.name": "名称（{locale}）",
-    "achievements.description": "描述（{locale}）",
-    "achievements.hidden": "隐藏",
-    "achievements.progress": "进度",
     "achievements.empty": "暂无成就",
     "achievements.noMatches": "无匹配结果",
-    "achievements.noProgress": "无",
-    "achievements.unlockedIcon": "已解锁图标",
-    "achievements.lockedIcon": "未解锁图标",
     "achievements.delete": "删除成就",
 
     "stats.title": "统计数据",
@@ -141,10 +124,6 @@ const zh: Record<MessageKey, string> = {
     "issue.statRange": "统计数据“{id}”的最小值大于最大值",
     "issue.apiName": "API 名称“{id}”只能包含 A-Z、a-z、0-9 和下划线，长度为 1-44 个字符",
     "issue.duplicate": "API 名称“{id}”重复",
-    "issue.progressUnknownStat": "进度引用了不存在的统计数据“{id}”",
-    "issue.progressMax": "进度最大值必须大于 0",
-    "issue.missingName": "缺少 {locale} 名称",
-    "issue.missingDescription": "缺少 {locale} 描述",
     "issue.noAppId": "未设置 Steam App ID",
 
     "node.unlock": "解锁成就",

@@ -23,7 +23,9 @@
 import type { PluginBlueprintNodeDef } from "narraleaf-studio/plugin";
 import {
     PLUGIN_ID,
+    carriedProgressMax,
     clampStatValue,
+    findAchievement,
     findStat,
     normalizeCatalog,
     type AchievementCatalog,
@@ -67,9 +69,6 @@ const PIN_ALSO_ACHIEVEMENTS = "alsoAchievements";
 const PARAM_APP_ID = "appId";
 
 const CATEGORY = "Steam";
-
-/** The value the author fills in; declared in the manifest's `contributes.buildConfig`. */
-const BUILD_CONFIG_APP_ID = "appId";
 
 /**
  * Steamworks issues App IDs as decimal numbers, and both store addresses below interpolate one
@@ -181,19 +180,18 @@ export function createSteamAchievementNodes(
         echo(ctx.game, appId(), method, params);
 
     /**
-     * The App ID the store address is built from: the build config first, the catalog second.
+     * The App ID a blank `Open Store Page` means: the app Steam says is running, else the
+     * catalog's.
      *
-     * That order is the whole reason the field exists. A demo is a separate Steam app from the game
-     * it demos, and the field is scoped per variant, so the demo build states the demo's App ID and
-     * the release states the release's — while the catalog holds one App ID for the entire project.
-     *
-     * The catalog is still read when the variant states nothing, rather than the node failing: that
-     * one project-wide value is the App ID this plugin already opens the Steam connection with, so
-     * it names the same app. It is also the only one that exists in Dev Mode, where `config` is
-     * empty — nothing has been built for a variant there — and where the button is first tried.
+     * Steam's answer comes first because it describes the copy actually running. A demo is a
+     * separate Steam app from the game it demos, and Steam starts it under the demo's App ID, so
+     * the demo's own page is what it opens with no second field to fill in; a demo button that
+     * should reach the full game names that game's App ID on the node. The catalog's covers every
+     * run with no Steam to ask: Dev Mode, the web and mobile builds, and a desktop copy started
+     * while Steam is closed.
      */
-    const storeAppId = (ctx: ExecuteCtx): string =>
-        readString(ctx.game.config.get(BUILD_CONFIG_APP_ID)) || readString(appId());
+    const storeAppId = async (ctx: ExecuteCtx): Promise<string> =>
+        readString((await status(ctx)).appId) || readString(appId());
 
     /**
      * Write one stat: mirror first (authoritative), then echo the absolute value
@@ -286,9 +284,9 @@ export function createSteamAchievementNodes(
             inspectorParams: [achievementParam(t)],
             execute: async ctx => {
                 const id = resolveAchievementId(ctx);
-                const authored = catalog().achievements.find(item => item.id === id)?.progress;
+                const carried = carriedProgressMax(findAchievement(catalog(), id));
                 const current = Math.trunc(readNumber(ctx.resolveInput?.(PIN_CURRENT)));
-                const max = Math.trunc(readNumber(ctx.resolveInput?.(PIN_MAX), authored?.max ?? 0));
+                const max = Math.trunc(readNumber(ctx.resolveInput?.(PIN_MAX), carried ?? 0));
                 // Mirrored so an in-game achievement gallery can draw the bar
                 // without Steam. Steam itself only draws a transient toast.
                 const progress = await readProgress(ctx.game);
@@ -450,9 +448,9 @@ export function createSteamAchievementNodes(
                 { id: "failed", kind: "output", semantic: "exec", label: t("pin.failed") },
                 { id: "error", kind: "output", semantic: "data", valueType: "string", label: t("pin.error") },
             ],
-            // Blank opens this build's own page, which is what it always did. Filled in, it opens
-            // that app's - which is how a "buy the extra chapter" button reaches the DLC's page
-            // rather than the game's.
+            // Blank opens the running game's own page. Filled in, it opens that app's - which is
+            // how a "buy the extra chapter" button reaches the DLC's page, and a demo's "buy the
+            // game" button the full game's, rather than their own.
             inspectorParams: [{
                 key: PARAM_APP_ID,
                 label: t("param.appId"),
@@ -474,10 +472,10 @@ export function createSteamAchievementNodes(
                         + "has no way to ask. Try it in Dev Mode or a built game.",
                     );
                 }
-                const id = readString(ctx.params?.[PARAM_APP_ID]) || storeAppId(ctx);
+                const id = readString(ctx.params?.[PARAM_APP_ID]) || await storeAppId(ctx);
                 if (!id) {
-                    return fail("No Steam App ID for this build. Fill in \"Steam App ID\" for this "
-                        + "variant on the build dialog's Plugins page.");
+                    return fail("No Steam App ID. Fill in \"Steam App ID\" on the Achievements tab, "
+                        + "or the node's own App ID.");
                 }
                 if (!APP_ID_PATTERN.test(id)) {
                     return fail(`"${id}" is not a Steam App ID. Steamworks issues a number, such as 480.`);

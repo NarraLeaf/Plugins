@@ -1,10 +1,14 @@
 /**
  * Studio entry: the achievement editor.
  *
- * It is an **editor tab**, not a sidebar panel — an achievement is a row with an
- * API name, two icons, localized text and a progress binding, and that table
- * needs width the right rail does not have. The left rail keeps one icon whose
- * only job is to open the tab (`railAction`), which is how the dashboard does it.
+ * It is an **editor tab**, not a sidebar panel — the stats table needs width the
+ * right rail does not have. The left rail keeps one icon whose only job is to open
+ * the tab (`railAction`), which is how the dashboard does it.
+ *
+ * The tab asks only for what the game uses: the Steam App ID, each achievement's
+ * API Name, and each stat's API Name, type and bounds. What a player sees of an
+ * achievement - its name, description and icons - is set on the Steamworks
+ * partner site and drawn by Steam, so it is not asked for a second time here.
  *
  * Layout note: the editor group clips its content host, so the tab sizes itself
  * to the host and brings its own scroller.
@@ -15,14 +19,12 @@
  * style, deliberately.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Image, Plus, Trash2, Trophy, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Plus, Trash2, Trophy } from "lucide-react";
 import {
-    AssetType,
     PanelPosition,
     definePlugin,
     ui,
-    type Asset,
     type BlueprintInspectorParamSelectOption,
     type FreezeGuard,
     type PluginApp,
@@ -33,13 +35,11 @@ import {
     STEAM_API_NAME_PATTERN,
     emptyCatalog,
     issuesBySubject,
-    localizedText,
     normalizeCatalog,
     validateCatalog,
     type Achievement,
     type AchievementCatalog,
     type CatalogIssue,
-    type LocaleCode,
     type SteamStat,
     type SteamStatType,
 } from "./catalog";
@@ -54,9 +54,9 @@ import { MESSAGES, type Translate } from "./i18n";
 const RAIL_ID = `${PLUGIN_ID}.rail`;
 const TAB_ID = `${PLUGIN_ID}.editor`;
 
-/** Achievement row tracks: icons, api name, name, description, hidden, progress, delete. */
-const ACHIEVEMENT_COLUMNS = "4.5rem 12rem minmax(9rem, 1fr) minmax(12rem, 1.6fr) 3rem 15rem 2rem";
-const STAT_COLUMNS = "12rem 7rem 7rem 7rem 7rem 5rem 2rem";
+/** Achievement row tracks: api name, delete. */
+const ACHIEVEMENT_COLUMNS = "minmax(12rem, 24rem) 2rem";
+const STAT_COLUMNS = "12rem 7rem 7rem 7rem 7rem 7rem 2rem";
 
 type CatalogStore = ReturnType<typeof createCatalogStore>;
 
@@ -105,16 +105,13 @@ function createCatalogStore(app: PluginApp) {
             };
         },
         getAchievementOptions: (): BlueprintInspectorParamSelectOption[] =>
-            catalog.achievements.map(achievement => ({
-                value: achievement.id,
-                label: localizedText(achievement.name, catalog.locales[0], catalog.locales) || achievement.id,
-            })),
+            catalog.achievements.map(achievement => ({ value: achievement.id, label: achievement.id })),
         getStatOptions: (): BlueprintInspectorParamSelectOption[] =>
             catalog.stats.map(stat => ({ value: stat.id, label: stat.id })),
         patch: (patch: Partial<AchievementCatalog>) => commit({ ...catalog, ...patch }),
-        patchAchievement: (id: string, patch: Partial<Achievement>) => commit({
+        renameAchievement: (id: string, next: string) => commit({
             ...catalog,
-            achievements: catalog.achievements.map(item => (item.id === id ? { ...item, ...patch } : item)),
+            achievements: catalog.achievements.map(item => (item.id === id ? { ...item, id: next } : item)),
         }),
         patchStat: (id: string, patch: Partial<SteamStat>) => commit({
             ...catalog,
@@ -124,12 +121,7 @@ function createCatalogStore(app: PluginApp) {
             ...catalog,
             achievements: [
                 ...catalog.achievements,
-                {
-                    id: uniqueId("ACHIEVEMENT", catalog.achievements.map(item => item.id)),
-                    name: {},
-                    description: {},
-                    hidden: false,
-                },
+                { id: uniqueId("ACHIEVEMENT", catalog.achievements.map(item => item.id)) },
             ],
         }),
         addStat: () => commit({
@@ -161,51 +153,28 @@ function uniqueId(prefix: string, taken: string[]): string {
 
 /* -------------------------------------------------------------------- tab */
 
-type IconSlot = "iconAchievedAssetId" | "iconUnachievedAssetId";
-
 function AchievementsTab({ app, store }: { app: PluginApp; store: CatalogStore }) {
     const [catalog, setCatalog] = useState<AchievementCatalog>(() => store.get());
-    const [locale, setLocale] = useState<LocaleCode>(() => store.get().locales[0]);
     const [query, setQuery] = useState("");
-    const [newLocale, setNewLocale] = useState("");
-    const [iconTarget, setIconTarget] = useState<{ achievementId: string; slot: IconSlot } | null>(null);
-    const anchorRef = useRef<HTMLDivElement | null>(null);
-    // Only the writes are switched off. Searching, switching the display
-    // language and scrolling the table are the whole point of looking at a
-    // frozen version, so they stay live.
+    // Only the writes are switched off. Searching and scrolling the table are
+    // the whole point of looking at a frozen version, so they stay live.
     const freeze = ui.useFreezeGuard();
     const t = useTranslate(app);
 
     useEffect(() => store.subscribe(() => setCatalog({ ...store.get() })), [store]);
-    useEffect(() => {
-        if (!catalog.locales.includes(locale)) {
-            setLocale(catalog.locales[0]);
-        }
-    }, [catalog.locales, locale]);
 
     const issues = useMemo(() => validateCatalog(catalog, t), [catalog, t]);
     const bySubject = useMemo(() => issuesBySubject(issues), [issues]);
+    const catalogIssue = issues.find(issue => !issue.subjectId);
     const errorCount = issues.filter(issue => issue.severity === "error").length;
     const warningCount = issues.length - errorCount;
 
     const achievements = useMemo(() => {
         const needle = query.trim().toLowerCase();
-        if (!needle) {
-            return catalog.achievements;
-        }
-        return catalog.achievements.filter(achievement =>
-            achievement.id.toLowerCase().includes(needle) ||
-            Object.values(achievement.name).some(text => text.toLowerCase().includes(needle))
-        );
+        return needle
+            ? catalog.achievements.filter(achievement => achievement.id.toLowerCase().includes(needle))
+            : catalog.achievements;
     }, [catalog.achievements, query]);
-
-    const statOptions = useMemo(
-        () => [
-            { value: "", label: t("achievements.noProgress") },
-            ...catalog.stats.map(stat => ({ value: stat.id, label: stat.id })),
-        ],
-        [catalog.stats, t],
-    );
 
     const run = (action: Promise<void>) => {
         void action.catch((error: unknown) => {
@@ -213,78 +182,23 @@ function AchievementsTab({ app, store }: { app: PluginApp; store: CatalogStore }
         });
     };
 
-    const setLocalizedText = (achievement: Achievement, field: "name" | "description", text: string) => {
-        run(store.patchAchievement(achievement.id, { [field]: { ...achievement[field], [locale]: text } }));
-    };
-
-    const addLocale = () => {
-        const code = newLocale.trim();
-        if (!code || catalog.locales.includes(code)) {
-            return;
-        }
-        setNewLocale("");
-        setLocale(code);
-        run(store.patch({ locales: [...catalog.locales, code] }));
-    };
-
-    const target = iconTarget
-        ? catalog.achievements.find(item => item.id === iconTarget.achievementId)
-        : undefined;
-
     return (
         <div className="flex h-full min-h-0 flex-col bg-surface text-fg">
             <div className="flex flex-wrap items-center gap-2 border-b border-edge px-3 py-2">
-                {/* A draft, like every other field. Bound straight to the store,
+                <span className="text-xs text-fg-muted">{t("toolbar.appId")}</span>
+                {/* The input fills its parent, so the parent sets the width. A
+                    draft, like every other field: bound straight to the store,
                     this wrote the whole catalog to disk on every keystroke. */}
-                <DraftInput
-                    value={catalog.appId ?? ""}
-                    placeholder={t("toolbar.appIdPlaceholder")}
-                    className="w-36"
-                    allowEmpty
-                    {...freeze.writes()}
-                    onCommit={appId => run(store.patch({ appId }))}
-                />
-                <ui.SearchInput
-                    size="sm"
-                    placeholder={t("toolbar.searchPlaceholder")}
-                    value={query}
-                    className="w-56"
-                    onChange={event => setQuery(event.target.value)}
-                />
-                <div className="flex items-center gap-1">
-                    <ui.Select
-                        size="sm"
-                        value={locale}
-                        options={catalog.locales.map(code => ({ value: code, label: code }))}
-                        onChange={value => setLocale(String(value))}
-                    />
-                    <ui.Input
-                        size="sm"
-                        value={newLocale}
-                        placeholder={t("toolbar.addLocalePlaceholder")}
-                        className="w-24"
+                <div style={{ width: "9rem" }}>
+                    <DraftInput
+                        value={catalog.appId ?? ""}
+                        ariaLabel={t("toolbar.appId")}
+                        allowEmpty
                         {...freeze.writes()}
-                        onChange={event => setNewLocale(event.target.value)}
-                        onKeyDown={freeze.run(event => {
-                            if (event.key === "Enter") {
-                                addLocale();
-                            }
-                        })}
+                        onCommit={appId => run(store.patch({ appId }))}
                     />
-                    <ui.IconButton
-                        size="sm"
-                        variant="ghost"
-                        aria-label={t("toolbar.removeLocale")}
-                        // The last language is not removable on its own account,
-                        // and that reason must survive a thaw.
-                        {...freeze.writes(catalog.locales.length < 2, t("toolbar.removeLocale"))}
-                        onClick={() => run(store.patch({
-                            locales: catalog.locales.filter(code => code !== locale),
-                        }))}
-                    >
-                        <X size={13} />
-                    </ui.IconButton>
                 </div>
+                {catalogIssue && <span className="text-xs text-warning">{catalogIssue.message}</span>}
                 <div className="flex-1" />
                 {(errorCount > 0 || warningCount > 0) && (
                     <span className="text-xs">
@@ -293,31 +207,29 @@ function AchievementsTab({ app, store }: { app: PluginApp; store: CatalogStore }
                         {warningCount > 0 && <span className="text-warning">{t("toolbar.warnings", { count: warningCount })}</span>}
                     </span>
                 )}
-                <ui.Button
+                <ui.SearchInput
                     size="sm"
-                    variant="primary"
-                    {...freeze.writes()}
-                    onClick={() => run(store.addAchievement())}
-                >
-                    <Plus size={14} />
-                    {t("toolbar.addAchievement")}
-                </ui.Button>
+                    placeholder={t("toolbar.searchPlaceholder")}
+                    value={query}
+                    className="w-56"
+                    onChange={event => setQuery(event.target.value)}
+                />
+            </div>
+
+            <div className="flex flex-col gap-1 border-b border-edge px-3 py-2 text-xs text-fg-subtle">
+                <span>{t("notice.steamworks")}</span>
+                <span>{t("notice.sync")}</span>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
                 <div className="min-w-max">
-                    <HeaderRow
-                        columns={ACHIEVEMENT_COLUMNS}
-                        labels={[
-                            t("achievements.icons"),
-                            t("achievements.apiName"),
-                            t("achievements.name", { locale }),
-                            t("achievements.description", { locale }),
-                            t("achievements.hidden"),
-                            t("achievements.progress"),
-                            "",
-                        ]}
+                    <SectionHeader
+                        title={t("achievements.title")}
+                        addLabel={t("achievements.add")}
+                        freeze={freeze}
+                        onAdd={() => run(store.addAchievement())}
                     />
+                    <HeaderRow columns={ACHIEVEMENT_COLUMNS} labels={[t("achievements.apiName"), ""]} />
                     {achievements.length === 0 ? (
                         <div className="px-3 py-6 text-xs text-fg-subtle">
                             {catalog.achievements.length === 0 ? t("achievements.empty") : t("achievements.noMatches")}
@@ -325,35 +237,21 @@ function AchievementsTab({ app, store }: { app: PluginApp; store: CatalogStore }
                     ) : achievements.map(achievement => (
                         <AchievementRow
                             key={achievement.id}
-                            app={app}
                             t={t}
                             achievement={achievement}
-                            locale={locale}
-                            statOptions={statOptions}
                             freeze={freeze}
                             issues={bySubject.get(achievement.id) ?? []}
-                            onRename={id => run(store.patchAchievement(achievement.id, { id }))}
-                            onText={(field, text) => setLocalizedText(achievement, field, text)}
-                            onHidden={hidden => run(store.patchAchievement(achievement.id, { hidden }))}
-                            onProgress={progress => run(store.patchAchievement(achievement.id, { progress }))}
-                            onPickIcon={slot => setIconTarget({ achievementId: achievement.id, slot })}
-                            onClearIcon={slot => run(store.patchAchievement(achievement.id, { [slot]: undefined }))}
+                            onRename={id => run(store.renameAchievement(achievement.id, id))}
                             onRemove={() => run(store.removeAchievement(achievement.id))}
                         />
                     ))}
 
-                    <div className="flex items-center gap-2 border-t border-edge px-3 py-2">
-                        <span className="text-xs font-semibold text-fg-muted">{t("stats.title")}</span>
-                        <ui.Button
-                            size="sm"
-                            variant="secondary"
-                            {...freeze.writes()}
-                            onClick={() => run(store.addStat())}
-                        >
-                            <Plus size={13} />
-                            {t("stats.add")}
-                        </ui.Button>
-                    </div>
+                    <SectionHeader
+                        title={t("stats.title")}
+                        addLabel={t("stats.add")}
+                        freeze={freeze}
+                        onAdd={() => run(store.addStat())}
+                    />
                     <HeaderRow
                         columns={STAT_COLUMNS}
                         labels={[
@@ -381,23 +279,28 @@ function AchievementsTab({ app, store }: { app: PluginApp; store: CatalogStore }
                     ))}
                 </div>
             </div>
+        </div>
+    );
+}
 
-            <div ref={anchorRef} className="h-0 w-full" />
-            <ui.AssetSelector
-                visible={Boolean(iconTarget)}
-                assetType={AssetType.Image}
-                selectedIds={target && iconTarget ? [target[iconTarget.slot] ?? ""].filter(Boolean) : []}
-                anchorRef={anchorRef}
-                title={t(iconTarget?.slot === "iconUnachievedAssetId" ? "achievements.lockedIcon" : "achievements.unlockedIcon")}
-                onClose={() => setIconTarget(null)}
-                onConfirm={assets => {
-                    const picked = assets[0] as Asset | undefined;
-                    if (iconTarget && picked) {
-                        run(store.patchAchievement(iconTarget.achievementId, { [iconTarget.slot]: picked.id }));
-                    }
-                    setIconTarget(null);
-                }}
-            />
+function SectionHeader({
+    title,
+    addLabel,
+    freeze,
+    onAdd,
+}: {
+    title: string;
+    addLabel: string;
+    freeze: FreezeGuard;
+    onAdd: () => void;
+}) {
+    return (
+        <div className="flex items-center gap-2 border-b border-edge px-3 py-2">
+            <span className="text-xs font-semibold text-fg-muted">{title}</span>
+            <ui.Button size="sm" variant="secondary" {...freeze.writes()} onClick={onAdd}>
+                <Plus size={13} />
+                {addLabel}
+            </ui.Button>
         </div>
     );
 }
@@ -414,109 +317,31 @@ function HeaderRow({ columns, labels }: { columns: string; labels: string[] }) {
 }
 
 function AchievementRow({
-    app,
     t,
     achievement,
-    locale,
-    statOptions,
     freeze,
     issues,
     onRename,
-    onText,
-    onHidden,
-    onProgress,
-    onPickIcon,
-    onClearIcon,
     onRemove,
 }: {
-    app: PluginApp;
     t: Translate;
     achievement: Achievement;
-    locale: LocaleCode;
-    statOptions: { value: string; label: string }[];
     freeze: FreezeGuard;
     issues: CatalogIssue[];
     onRename: (id: string) => void;
-    onText: (field: "name" | "description", text: string) => void;
-    onHidden: (hidden: boolean) => void;
-    onProgress: (progress: Achievement["progress"]) => void;
-    onPickIcon: (slot: IconSlot) => void;
-    onClearIcon: (slot: IconSlot) => void;
     onRemove: () => void;
 }) {
     const error = issues.find(issue => issue.severity === "error");
-    const warning = issues.find(issue => issue.severity === "warning");
 
     return (
         <div className="border-b border-edge-subtle px-3 py-1.5">
             <div className="grid items-center gap-2" style={{ gridTemplateColumns: ACHIEVEMENT_COLUMNS }}>
-                <div className="flex items-center gap-1">
-                    <IconCell
-                        app={app}
-                        assetId={achievement.iconAchievedAssetId ?? null}
-                        title={t("achievements.unlockedIcon")}
-                        freeze={freeze}
-                        onPick={() => onPickIcon("iconAchievedAssetId")}
-                        onClear={() => onClearIcon("iconAchievedAssetId")}
-                    />
-                    <IconCell
-                        app={app}
-                        assetId={achievement.iconUnachievedAssetId ?? null}
-                        title={t("achievements.lockedIcon")}
-                        freeze={freeze}
-                        onPick={() => onPickIcon("iconUnachievedAssetId")}
-                        onClear={() => onClearIcon("iconUnachievedAssetId")}
-                    />
-                </div>
                 <DraftInput
                     value={achievement.id}
                     variant={STEAM_API_NAME_PATTERN.test(achievement.id) ? "default" : "error"}
                     {...freeze.writes()}
                     onCommit={onRename}
                 />
-                <DraftInput
-                    value={achievement.name[locale] ?? ""}
-                    {...freeze.writes()}
-                    onCommit={text => onText("name", text)}
-                    allowEmpty
-                />
-                <DraftInput
-                    value={achievement.description[locale] ?? ""}
-                    {...freeze.writes()}
-                    onCommit={text => onText("description", text)}
-                    allowEmpty
-                />
-                <ui.Switch
-                    size="sm"
-                    checked={achievement.hidden}
-                    {...freeze.writes()}
-                    onCheckedChange={onHidden}
-                />
-                <div className="flex items-center gap-1">
-                    <ui.Select
-                        size="sm"
-                        value={achievement.progress?.statId ?? ""}
-                        options={statOptions}
-                        portalMenu
-                        {...freeze.writes()}
-                        onChange={value => {
-                            const statId = String(value);
-                            onProgress(statId ? { statId, max: achievement.progress?.max ?? 0 } : undefined);
-                        }}
-                    />
-                    {achievement.progress && (
-                        <DraftInput
-                            value={String(achievement.progress.max)}
-                            className="w-16"
-                            allowEmpty
-                            {...freeze.writes()}
-                            onCommit={text => onProgress({
-                                statId: achievement.progress?.statId ?? "",
-                                max: Number.parseFloat(text) || 0,
-                            })}
-                        />
-                    )}
-                </div>
                 <ui.IconButton
                     size="sm"
                     variant="danger"
@@ -527,9 +352,9 @@ function AchievementRow({
                     <Trash2 size={13} />
                 </ui.IconButton>
             </div>
-            {(error ?? warning) && (
-                <div className={`text-xs ${error ? "text-danger" : "text-warning"}`}>
-                    {(error ?? warning)?.message}
+            {error && (
+                <div className="text-xs text-danger">
+                    {error.message}
                     {issues.length > 1 && ` (+${issues.length - 1})`}
                 </div>
             )}
@@ -612,79 +437,11 @@ function StatRow({
     );
 }
 
-function IconCell({
-    app,
-    assetId,
-    title,
-    freeze,
-    onPick,
-    onClear,
-}: {
-    app: PluginApp;
-    assetId: string | null;
-    title: string;
-    freeze: FreezeGuard;
-    onPick: () => void;
-    onClear: () => void;
-}) {
-    const [url, setUrl] = useState<string | null>(null);
-
-    useEffect(() => {
-        let disposed = false;
-        let objectUrl: string | null = null;
-        const asset = assetId ? app.services.assets.get(AssetType.Image, assetId) : undefined;
-        if (!asset) {
-            setUrl(null);
-            return;
-        }
-        app.services.assets.createObjectUrl(asset)
-            .then(next => {
-                if (disposed) {
-                    app.services.assets.revokeObjectUrl(next);
-                    return;
-                }
-                objectUrl = next;
-                setUrl(next);
-            })
-            .catch(() => {
-                if (!disposed) {
-                    setUrl(null);
-                }
-            });
-        return () => {
-            disposed = true;
-            if (objectUrl) {
-                app.services.assets.revokeObjectUrl(objectUrl);
-            }
-        };
-    }, [app, assetId]);
-
-    return (
-        <button
-            type="button"
-            aria-label={title}
-            className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded border border-edge bg-surface-sunken"
-            {...freeze.writes(false, title)}
-            onClick={onPick}
-            // A handler the control hangs on itself, so `disabled` above is not
-            // the whole story — a right-click still reaches it. Guard it too.
-            onContextMenu={freeze.run(event => {
-                event.preventDefault();
-                onClear();
-            })}
-        >
-            {url
-                ? <img src={url} alt="" className="h-full w-full object-cover" />
-                : <Image size={13} className="text-fg-subtle" />}
-        </button>
-    );
-}
-
 /**
  * The plugin's translator, re-rendering the caller on a language switch.
  *
  * The returned function changes identity with the locale, so a memo that words
- * its result (the catalog checks, the progress picker's "None") recomputes too.
+ * its result (the catalog checks) recomputes too.
  */
 function useTranslate(app: PluginApp): Translate {
     const translator = useMemo(() => app.services.i18n.createTranslator(MESSAGES), [app]);
@@ -708,6 +465,7 @@ function DraftInput({
     variant,
     className,
     placeholder,
+    ariaLabel,
     disabled,
     title,
 }: {
@@ -717,6 +475,7 @@ function DraftInput({
     variant?: "default" | "error";
     className?: string;
     placeholder?: string;
+    ariaLabel?: string;
     /** Spread from `FreezeGuard.writes()` at every call site that edits the catalog. */
     disabled?: boolean;
     title?: string;
@@ -743,6 +502,7 @@ function DraftInput({
             variant={variant}
             className={className}
             placeholder={placeholder}
+            aria-label={ariaLabel}
             disabled={disabled}
             title={title}
             value={draft}

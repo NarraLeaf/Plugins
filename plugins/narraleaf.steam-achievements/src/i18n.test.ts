@@ -38,9 +38,11 @@ describe("validateCatalog in Chinese", () => {
                 params && name in params ? String(params[name]) : token);
         const issues = validateCatalog({
             ...emptyCatalog(),
-            locales: ["zh-CN"],
-            achievements: [{ id: "A", name: {}, description: { "zh-CN": "描述" }, hidden: false }],
+            achievements: [{ id: "has space" }],
         }, t);
-        expect(issues.map(issue => issue.message)).toEqual(["缺少 zh-CN 名称", "未设置 Steam App ID"]);
+        expect(issues.map(issue => issue.message)).toEqual([
+            "API 名称“has space”只能包含 A-Z、a-z、0-9 和下划线，长度为 1-44 个字符",
+            "未设置 Steam App ID",
+        ]);
     });
 });
