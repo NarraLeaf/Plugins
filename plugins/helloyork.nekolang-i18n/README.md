@@ -52,7 +52,10 @@ Studio 的 `catalog/zh` 有增删，都要重新生成一次：
    `{type}` 名词（`dialogs.noun.*`）、计数片段（`common.count.*`、
    `assets.magicTag.tagCount` 这类被 `tn()` 算好再塞进 `{errors}`、`{tags}` 的键）、
    存储名（`workspace.shell.save.stores.*`）和只负责拼接的模板（`{headline}；{reason}`）；
-   「喵」由拼接它们的那句话来说。
+   「喵」由拼接它们的那句话来说；
+6. 本包声明支持的最低 Studio（`package.json` 的 `narraleaf.studioVersion`，现为 1.0.0）里有、
+   新版已经删掉的键，原样留在包里。多出来的键 Studio 不会报错；少了它们，用旧版 Studio 的读者
+   在那几处看到的是英文。
 - `build.mjs` 在打包时把 `locales/*.json` 一并拷入 `dist/`（模板的构建脚本只拷贝入口
   与清单，语言文件是数据、需要额外拷贝）。
 
