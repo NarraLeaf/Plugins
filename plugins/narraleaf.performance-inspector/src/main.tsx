@@ -11,9 +11,10 @@
  * anything: the profiler only exists inside a running game.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Gauge } from "lucide-react";
 import { PanelPosition, definePlugin, ui, type PluginApp } from "narraleaf-studio/plugin";
+import { EDITOR_MESSAGES, type EditorTranslate } from "./editorStrings";
 import { createPerformanceNodes, inertBridge } from "./nodes";
 import {
     DEFAULT_SETTINGS,
@@ -79,25 +80,46 @@ function useSettings(store: SettingsStore): InspectorSettings {
     return settings;
 }
 
-function PerformancePanel({ store }: { store: SettingsStore }) {
+/**
+ * The plugin's translator, re-rendering the panel on a language switch.
+ *
+ * The returned function changes identity with the locale, so everything the panel words is worded
+ * again in the new language.
+ */
+function useTranslate(app: PluginApp): EditorTranslate {
+    const translator = useMemo(() => app.services.i18n.createTranslator(EDITOR_MESSAGES), [app]);
+    const subscribe = useCallback((listener: () => void) => {
+        const cleanup = app.services.i18n.onLocaleChange(() => listener());
+        return () => {
+            void cleanup();
+        };
+    }, [app]);
+    const locale = useSyncExternalStore(subscribe, () => app.services.i18n.locale);
+    // `locale` is in the deps for the new identity, not for its value: the translator resolves
+    // against the editor language at call time.
+    return useCallback((key, params) => translator.t(key, params), [translator, locale]);
+}
+
+function PerformancePanel({ app, store }: { app: PluginApp; store: SettingsStore }) {
     const settings = useSettings(store);
+    const t = useTranslate(app);
     const freeze = ui.useFreezeGuard();
     const writes = freeze.writes();
 
     return (
         <ui.Panel.Root>
             <ui.Panel.Header
-                title="Performance Inspector"
-                description="Frame rate, memory and asset loading, measured inside the running game."
+                title={t("header.title")}
+                description={t("header.description")}
             />
             <div className="min-h-0 flex-1 overflow-y-auto">
-                <ui.Panel.Section title="Availability">
+                <ui.Panel.Section title={t("section.availability")}>
                     <ui.Panel.Row
-                        label="Overlay availability"
+                        label={t("availability.label")}
                         description={
                             settings.availability === "everywhere"
-                                ? "Previews and built games can open the overlay. Whatever opens it in Dev Mode opens it for a player too."
-                                : "Only Dev Mode. In a preview or a built game the nodes do nothing."
+                                ? t("availability.everywhere.description")
+                                : t("availability.studio.description")
                         }
                         control={
                             <ui.Select
@@ -105,19 +127,19 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                                 value={settings.availability}
                                 disabled={writes.disabled}
                                 options={[
-                                    { value: "studio", label: "Dev Mode only" },
-                                    { value: "everywhere", label: "Dev Mode and every build" },
+                                    { value: "studio", label: t("availability.option.studio") },
+                                    { value: "everywhere", label: t("availability.option.everywhere") },
                                 ]}
                                 onChange={value => void store.update({ availability: value === "everywhere" ? "everywhere" : "studio" })}
                             />
                         }
                     />
                     <ui.Panel.Row
-                        label="Start measuring"
+                        label={t("collectFrom.label")}
                         description={
                             settings.collectFrom === "graph"
-                                ? "Nothing is measured until a Start Profiling node runs, so the boot is not covered."
-                                : "From the first frame, so startup is covered."
+                                ? t("collectFrom.graph.description")
+                                : t("collectFrom.gameStart.description")
                         }
                         control={
                             <ui.Select
@@ -125,41 +147,41 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                                 value={settings.collectFrom}
                                 disabled={writes.disabled}
                                 options={[
-                                    { value: "gameStart", label: "At game start" },
-                                    { value: "graph", label: "When a graph says so" },
+                                    { value: "gameStart", label: t("collectFrom.option.gameStart") },
+                                    { value: "graph", label: t("collectFrom.option.graph") },
                                 ]}
                                 onChange={value => void store.update({ collectFrom: value === "graph" ? "graph" : "gameStart" })}
                             />
                         }
                     />
                     <ui.Panel.Row
-                        label="Overlay at game start"
+                        label={t("openAt.label")}
                         control={
                             <ui.Select
                                 size="sm"
                                 value={settings.openAt}
                                 disabled={writes.disabled}
                                 options={[
-                                    { value: "hidden", label: "Nothing" },
-                                    { value: "hud", label: "Compact display" },
-                                    { value: "inspector", label: "Full panel" },
+                                    { value: "hidden", label: t("openAt.option.hidden") },
+                                    { value: "hud", label: t("openAt.option.hud") },
+                                    { value: "inspector", label: t("openAt.option.inspector") },
                                 ]}
                                 onChange={value => void store.update({ openAt: String(value) as InspectorSettings["openAt"] })}
                             />
                         }
                     />
                     <ui.Panel.Row
-                        label="Compact display corner"
+                        label={t("corner.label")}
                         control={
                             <ui.Select
                                 size="sm"
                                 value={settings.corner}
                                 disabled={writes.disabled}
                                 options={[
-                                    { value: "top-left", label: "Top left" },
-                                    { value: "top-right", label: "Top right" },
-                                    { value: "bottom-left", label: "Bottom left" },
-                                    { value: "bottom-right", label: "Bottom right" },
+                                    { value: "top-left", label: t("corner.option.topLeft") },
+                                    { value: "top-right", label: t("corner.option.topRight") },
+                                    { value: "bottom-left", label: t("corner.option.bottomLeft") },
+                                    { value: "bottom-right", label: t("corner.option.bottomRight") },
                                 ]}
                                 onChange={value => void store.update({ corner: String(value) as InspectorSettings["corner"] })}
                             />
@@ -167,10 +189,10 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                     />
                 </ui.Panel.Section>
 
-                <ui.Panel.Section title="Collection">
+                <ui.Panel.Section title={t("section.collection")}>
                     <ui.Panel.Row
-                        label="Measure asset loading"
-                        description="Asset sizes, request counts, decode time, and what is still held in memory."
+                        label={t("instrumentAssets.label")}
+                        description={t("instrumentAssets.description")}
                         control={
                             <ui.Switch
                                 checked={settings.instrumentAssets}
@@ -181,8 +203,8 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                         }
                     />
                     <ui.Panel.Row
-                        label="Frame history"
-                        description="How far back the frame-time chart and the percentiles reach."
+                        label={t("historySeconds.label")}
+                        description={t("historySeconds.description")}
                         control={
                             <ui.Select
                                 size="sm"
@@ -190,15 +212,17 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                                 disabled={writes.disabled}
                                 options={HISTORY_SECONDS_CHOICES.map(seconds => ({
                                     value: String(seconds),
-                                    label: seconds >= 60 ? `${seconds / 60} min` : `${seconds} s`,
+                                    label: seconds >= 60
+                                        ? t("historySeconds.minutes", { count: seconds / 60 })
+                                        : t("historySeconds.seconds", { count: seconds }),
                                 }))}
                                 onChange={value => void store.update({ historySeconds: Number(value) })}
                             />
                         }
                     />
                     <ui.Panel.Row
-                        label="Reports in the game log"
-                        description="A capture also lands in the log file the build writes, so it survives the run."
+                        label={t("logOnCapture.label")}
+                        description={t("logOnCapture.description")}
                         control={
                             <ui.Switch
                                 checked={settings.logOnCapture}
@@ -210,18 +234,18 @@ function PerformancePanel({ store }: { store: SettingsStore }) {
                     />
                 </ui.Panel.Section>
 
-                <ui.Panel.Section title="In the game">
+                <ui.Panel.Section title={t("section.inGame")}>
                     <ui.Panel.Row
-                        label="Opening the overlay"
-                        description="A Set Performance Overlay node. For a key, put an On Key Down head in the game's global blueprint and wire it to that node — the binding is yours, and this plugin takes no key of its own."
+                        label={t("opening.label")}
+                        description={t("opening.description")}
                     />
                     <ui.Panel.Row
-                        label="Blueprint nodes"
-                        description="Start and Stop Profiling, Set Performance Overlay, Mark Performance Event, Begin and End Performance Span, Get Performance Stats, and Capture Performance Report, under the Performance category."
+                        label={t("nodes.label")}
+                        description={t("nodes.description")}
                     />
                     <ui.Panel.Row
-                        label="Reports"
-                        description="The full panel copies a report as JSON or as a written summary, and keeps the last capture in plugin storage."
+                        label={t("reports.label")}
+                        description={t("reports.description")}
                     />
                 </ui.Panel.Section>
             </div>
@@ -239,17 +263,30 @@ export default definePlugin({
         app.services.blueprintNodes.registerMany(createPerformanceNodes(inertBridge));
 
         const unregisterReloader = app.services.workspace.registerReloader(() => store.load());
-        const unregisterPanel = app.services.ui.panels.register({
+
+        const translator = app.services.i18n.createTranslator(EDITOR_MESSAGES);
+        const panelBody = () => <PerformancePanel app={app} store={store} />;
+        const registerPanel = () => app.services.ui.panels.register({
             id: PANEL_ID,
-            title: "Performance",
+            title: translator.t("rail.title"),
             icon: <Gauge size={16} />,
             position: PanelPosition.Right,
-            component: () => <PerformancePanel store={store} />,
+            component: panelBody,
             order: 680,
         });
+        let unregisterPanel = registerPanel();
+        // A panel title is a plain string read when the panel is registered (`titleKey` only
+        // reaches Studio's own catalogue), so following a language switch means registering it
+        // again. Registering an id that is already there replaces the entry in place and leaves the
+        // dock open on it, where unregistering first would close it. Only the newest disposer is
+        // kept: each of them removes the id, so calling an older one would remove the replacement.
+        const stopFollowingLocale = app.services.i18n.onLocaleChange(() => {
+            unregisterPanel = registerPanel();
+        });
 
-        return () => {
-            unregisterPanel();
+        return async () => {
+            await stopFollowingLocale();
+            await unregisterPanel();
             unregisterReloader();
         };
     },
