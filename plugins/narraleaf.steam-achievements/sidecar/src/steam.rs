@@ -81,6 +81,20 @@ impl Bridge {
         }
     }
 
+    /// Does this account own the DLC, and is its content on disk.
+    ///
+    /// `BIsDlcInstalled` rather than `BIsSubscribedApp`, because the two differ in exactly the case
+    /// worth reporting: a player who owns a DLC but has unticked it in the client's DLC tab has not
+    /// got the content, and telling them to buy what they already own is the one wrong answer here.
+    /// A DLC configured with no depots is installed as soon as it is owned, so the narrower call
+    /// still answers yes for those.
+    ///
+    /// Reads Steam and nothing else. Whether the content is *here* is the game's own question, and
+    /// it answers that from the files beside it - see the host's `Is DLC Installed`.
+    pub fn owns_dlc(&self, app_id: u32) -> bool {
+        self.client.apps().is_dlc_installed(steamworks::AppId(app_id))
+    }
+
     pub fn unlock(&mut self, id: &str) -> Result<(), String> {
         self.client
             .user_stats()

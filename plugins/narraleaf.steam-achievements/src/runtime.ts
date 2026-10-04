@@ -3,13 +3,16 @@
  * environment (Dev Mode window, Preview, Production, web export). Editor palette
  * metadata stays owned by the studio entry (main.tsx).
  *
- * Nothing is started here. The Steam bridge is spawned lazily on the first node
- * that needs it, so a game that never touches an achievement never pays for a
- * child process — and a build for a platform with no bridge never notices.
+ * The Steam bridge is started here only when the player has already unlocked
+ * something, so an achievement earned while Steam was closed reaches Steam as soon
+ * as the game starts with it. Otherwise it is spawned lazily on the first node that
+ * needs it: a game that never touches an achievement never pays for a child
+ * process, and a build for a platform with no bridge never notices.
  */
 
 import { defineRuntimePlugin } from "narraleaf-studio/runtime";
-import { CATALOG_NAMESPACE } from "./catalog";
+import { connectIfUnlocked } from "./bridge";
+import { CATALOG_NAMESPACE, normalizeCatalog } from "./catalog";
 import { createSteamAchievementNodes } from "./nodes";
 
 export default defineRuntimePlugin({
@@ -28,5 +31,10 @@ export default defineRuntimePlugin({
             return data;
         };
         app.game.blueprintNodes.registerMany(createSteamAchievementNodes(readCatalog));
+
+        // Not awaited: setup must not hold the game's start for a child process.
+        connectIfUnlocked(app.game, normalizeCatalog(readCatalog()).appId ?? null).catch((error: unknown) => {
+            app.game.log("warning", `Steam sync at start failed: ${error instanceof Error ? error.message : String(error)}`);
+        });
     },
 });

@@ -5,7 +5,9 @@
  * and every read node reads only it. Steam is a best-effort *echo* of that
  * mirror, never a source — which is what makes the same script work on Steam, on
  * itch, on the web export, in Dev Mode, and on a dev machine with Steam closed.
- * Degradation is the design, not a fallback path bolted on afterwards.
+ * Degradation is the design, not a fallback path bolted on afterwards. Each new
+ * connection to Steam replays the mirror's unlocked achievements, so one earned
+ * while Steam was closed reaches it the next time the game starts with Steam.
  *
  * The mirror lives in `app.game.store` (the `store` runtime capability): plugin
  * storage kept beside the player's saves, so it survives starting a new game —
@@ -142,15 +144,18 @@ function connect(game: Game, appId: string | null): Promise<{ handle: Handle; st
             });
             // `steam.init` both delivers the App ID and reports the result of
             // SteamAPI_Init, so opening the connection costs one round trip.
-            const status = await handle.request<SteamStatus>("steam.init", { appId });
-            return {
-                handle,
-                status: {
-                    available: status?.available === true,
-                    appId: typeof status?.appId === "string" ? status.appId : null,
-                    language: typeof status?.language === "string" ? status.language : null,
-                },
+            const reply = await handle.request<SteamStatus>("steam.init", { appId });
+            const status: SteamStatus = {
+                available: reply?.available === true,
+                appId: typeof reply?.appId === "string" ? reply.appId : null,
+                language: typeof reply?.language === "string" ? reply.language : null,
             };
+            // Before any node's own echo, so the first write of the session lands
+            // on a Steam that already knows everything the mirror does.
+            if (status.available) {
+                await replayUnlocked(game, handle);
+            }
+            return { handle, status };
         })
         .catch((error: unknown) => {
             dead = true;
@@ -160,13 +165,89 @@ function connect(game: Game, appId: string | null): Promise<{ handle: Handle; st
     return connection;
 }
 
+/**
+ * Send Steam every achievement the mirror holds.
+ *
+ * The mirror is written whether Steam is there or not, so a player who starts the
+ * game from a desktop shortcut with Steam closed still earns the achievement, on
+ * this device only. Steam would otherwise hear of it only if the same node ran
+ * again, which for a story beat is never. Unlocking is idempotent on Steam's
+ * side, so replaying the whole set on every connection costs a few calls and
+ * closes every gap at once.
+ *
+ * Stats are not replayed. A value is absolute, and this device's copy would
+ * overwrite a higher one Steam holds from another machine.
+ */
+async function replayUnlocked(game: Game, handle: Handle): Promise<void> {
+    // A mirror that cannot be read costs the replay, not the connection: the
+    // writes this session makes still have a Steam to reach.
+    let unlocked: Set<string>;
+    try {
+        unlocked = await readUnlocked(game);
+    } catch (error) {
+        game.log("warning", `Steam replay skipped: ${describe(error)}`);
+        return;
+    }
+    for (const id of unlocked) {
+        try {
+            await handle.request("achievements.unlock", { id });
+        } catch (error) {
+            game.log("warning", `Steam achievements.unlock failed for ${id}: ${describe(error)}`);
+        }
+    }
+}
+
 function describe(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Open the connection at game start when the mirror holds anything to replay.
+ *
+ * The connection is otherwise opened by the first node that needs Steam, and in a
+ * story whose next achievement is a chapter away, an unlock earned with Steam
+ * closed would wait that long. Only a game that has already unlocked something
+ * starts the bridge early; one that has unlocked nothing still spawns no process
+ * until a node asks.
+ */
+export async function connectIfUnlocked(game: Game, appId: string | null): Promise<void> {
+    if ((await readUnlocked(game)).size > 0) {
+        await connect(game, appId);
+    }
 }
 
 /** Steam's view of the world, or the all-false answer when there is no Steam. */
 export async function steamStatus(game: Game, appId: string | null): Promise<SteamStatus> {
     return (await connect(game, appId))?.status ?? UNAVAILABLE;
+}
+
+/**
+ * Ask Steam something and wait for the answer.
+ *
+ * The opposite of {@link echo} in the one way that matters: an echo is a write whose success was
+ * already decided by the mirror, so dropping it costs nothing. This is a READ, and there is no
+ * mirror to fall back on - nothing local knows what a player owns. So the caller is handed `null`
+ * for "could not ask", which is a third answer it has to decide about, rather than a `false` that
+ * would be indistinguishable from "does not own it".
+ *
+ * Never throws, for the reason every node here does not: the caller is drawing a menu.
+ */
+export async function ask<T>(
+    game: Game,
+    appId: string | null,
+    method: string,
+    params?: unknown,
+): Promise<T | null> {
+    const active = await connect(game, appId);
+    if (!active || !active.status.available) {
+        return null;
+    }
+    try {
+        return await active.handle.request<T>(method, params) ?? null;
+    } catch (error) {
+        game.log("warning", `Steam ${method} failed: ${describe(error)}`);
+        return null;
+    }
 }
 
 /**

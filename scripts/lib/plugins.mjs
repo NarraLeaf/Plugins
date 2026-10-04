@@ -31,8 +31,11 @@ export const INDEX_FORMAT_VERSION = 1;
 /** Studio only understands manifestVersion 2. v1 is hard-rejected at install. */
 export const PLUGIN_MANIFEST_VERSION = 2;
 export const PLUGIN_ENTRY_TARGETS = ["studio", "runtime"];
-/** Contribution kinds whose value is an array of `<pluginId>.`-prefixed type strings. */
-export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets", "runtimeData"];
+/**
+ * Contribution kinds whose value is an array of `<pluginId>.`-prefixed strings. `reservedSaveIds`
+ * names save ids the plugin keeps for itself, which Studio leaves out of the player's save list.
+ */
+export const PLUGIN_CONTRIBUTES_TYPE_KEYS = ["blueprintNodes", "widgets", "runtimeData", "tests", "reservedSaveIds"];
 /** Every recognized contributes key, including the object-shaped ones. */
 export const PLUGIN_CONTRIBUTES_KEYS = [
     ...PLUGIN_CONTRIBUTES_TYPE_KEYS,
@@ -40,7 +43,45 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
     "runtimeCapabilities",
     "sidecars",
     "buildDependencies",
+    "buildConfig",
+    "externalLinks",
+    "network",
 ];
+
+/**
+ * Schemes no declaration may name, whatever it says. Studio refuses these in
+ * `EXTERNAL_LINK_PATTERN_DENIED_SCHEMES`, so a manifest carrying one fails to
+ * install and is caught here instead.
+ *
+ * The first three are not addresses at all - they are script and inline content,
+ * and handing one to the platform opener is how "open a link" becomes "run this".
+ * `file:` is an address, and that is the point: the opener runs the file's
+ * registered handler, which for an executable is the same thing.
+ */
+export const EXTERNAL_LINK_PATTERN_DENIED_SCHEMES = [
+    "javascript:",
+    "data:",
+    "vbscript:",
+    "file:",
+];
+
+/**
+ * Schemes a `contributes.network` pattern may name. Studio's `NETWORK_ALLOWLIST_SCHEMES` in
+ * src/shared/types/networkAllowlist.ts: the Fetch node reaches no others, so neither does a
+ * declaration of where a plugin fetches from.
+ */
+export const NETWORK_PATTERN_SCHEMES = ["http:", "https:"];
+
+/** How a build config value is typed. `secret` is stored on the author's machine, not in the project. */
+export const PLUGIN_BUILD_CONFIG_TYPES = ["text", "secret"];
+/** Which builds share one build config value. */
+export const PLUGIN_BUILD_CONFIG_SCOPES = ["global", "variant", "platform", "variant-platform"];
+/**
+ * Every platform a build can target. Wider than BINARY_PLATFORMS below, which is
+ * about binaries a plugin ships: a build config field is a value the author
+ * types, so it applies to the web and mobile targets too.
+ */
+export const BUILD_CONFIG_PLATFORMS = ["windows", "macos", "linux", "web", "android", "ios"];
 
 /**
  * Capability domains a plugin's `runtime` entry may declare. Closed list: an
@@ -60,6 +101,7 @@ export const PLUGIN_RUNTIME_CAPABILITIES = [
     "menu",
     "story.compile",
     "diagnostics",
+    "process.memory",
 ];
 
 /**
@@ -67,15 +109,23 @@ export const PLUGIN_RUNTIME_CAPABILITIES = [
  * second source of truth for the same capability, which is how an install prompt
  * and a plugin's real reach drift apart — so it is rejected, not merged.
  */
-export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency"];
+export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency", "externalLink"];
 
 /** Desktop only: web has no process to spawn and the mobile shells are WebViews. */
 const BINARY_PLATFORMS = ["windows", "macos", "linux"];
 const BINARY_ARCHS = ["x64", "arm64", "universal"];
 
+/**
+ * Newline-delimited JSON names the framing, not the channel: an executable sidecar's frames travel
+ * over stdio, a node one's over the utility process's parent port. `stdio-jsonl` is the older
+ * spelling from when there was only one channel it could mean, and manifests that say it keep
+ * working - a published plugin is a file somebody already shipped.
+ */
+const SIDECAR_TRANSPORTS = ["jsonl", "stdio-jsonl"];
+
 const SIDECAR_DEFAULTS = {
     kind: "executable",
-    transport: "stdio-jsonl",
+    transport: "jsonl",
     autostart: "onGameStart",
     startupTimeoutMs: 5000,
     shutdownTimeoutMs: 3000,
@@ -332,6 +382,272 @@ function validateBuildDependencies(value, pluginId, errors) {
     return ids;
 }
 
+/**
+ * Build config field declarations: the values a plugin needs the author to
+ * supply before a build can ship.
+ *
+ * Unlike the other contributed identifiers these keys are *not* prefixed with
+ * the plugin id - the store is already per plugin - so uniqueness within the
+ * plugin is the whole of what keys a value. Declaring a field grants nothing,
+ * so nothing here feeds the derived permission kinds.
+ */
+function validateBuildConfig(value, pluginId, errors) {
+    if (value === undefined) {
+        return;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.buildConfig must be an array of field objects");
+        return;
+    }
+    const seen = new Set();
+    for (const item of value) {
+        if (!isRecord(item)) {
+            errors.push("contributes.buildConfig entries must be objects");
+            continue;
+        }
+        const key = typeof item.key === "string" ? item.key.trim() : "";
+        if (!key) {
+            errors.push(`contributes.buildConfig entries must declare a key (plugin "${pluginId}")`);
+            continue;
+        }
+        if (seen.has(key)) {
+            errors.push(`contributes.buildConfig declares "${key}" more than once`);
+        }
+        seen.add(key);
+
+        // The label is what the author sees; a blank one produces a field nothing
+        // on screen identifies.
+        const label = typeof item.label === "string" ? item.label.trim() : "";
+        if (!label) {
+            errors.push(`contributes.buildConfig["${key}"] must declare a label`);
+        }
+        if (!PLUGIN_BUILD_CONFIG_TYPES.includes(item.type)) {
+            errors.push(`contributes.buildConfig["${key}"] type must be one of: ${PLUGIN_BUILD_CONFIG_TYPES.join(", ")}`);
+        }
+        if (!PLUGIN_BUILD_CONFIG_SCOPES.includes(item.scope)) {
+            errors.push(`contributes.buildConfig["${key}"] scope must be one of: ${PLUGIN_BUILD_CONFIG_SCOPES.join(", ")}`);
+        }
+        if (item.platforms === undefined) {
+            continue;
+        }
+        // An empty list is refused rather than read as "every platform": it is a
+        // field that applies nowhere, so nothing would ever ask for it.
+        if (!Array.isArray(item.platforms) || item.platforms.length === 0) {
+            errors.push(`contributes.buildConfig["${key}"] platforms must be a non-empty array, or absent for every platform`);
+            continue;
+        }
+        for (const platform of item.platforms) {
+            const name = typeof platform === "string" ? platform.trim() : "";
+            if (!BUILD_CONFIG_PLATFORMS.includes(name)) {
+                errors.push(`contributes.buildConfig["${key}"] names an unknown platform: ${String(platform)} `
+                    + `(known: ${BUILD_CONFIG_PLATFORMS.join(", ")})`);
+            }
+        }
+    }
+}
+
+/**
+ * Whether the leading label is a wildcard, and what has to be matched after it.
+ *
+ * A `*` is a wildcard only as the entire first label. `*x.example.com` is not one
+ * and never becomes one - it is rejected rather than quietly read as a literal
+ * host, which would be a declaration that looks like it grants something and
+ * grants nothing.
+ */
+function splitWildcardHost(host) {
+    const labels = host.split(".");
+    const wildcards = labels.filter(label => label.includes("*")).length;
+    if (wildcards === 0) {
+        return { wildcard: false, labels };
+    }
+    if (wildcards > 1 || labels[0] !== "*") {
+        return null;
+    }
+    return { wildcard: true, labels: labels.slice(1) };
+}
+
+/**
+ * One declared pattern taken apart, or null when it is not a pattern at all.
+ *
+ * A port of Studio's `parseExternalLinkPattern` in
+ * src/shared/types/externalLinkPattern.ts. Both sides parse rather than compare
+ * strings, because a host is a suffix-structured name: `https://store.example.com`
+ * is a *prefix* of `https://store.example.com.evil.test`, so a prefix test over
+ * the whole address is not a prefix test over the authority.
+ */
+function parseExternalLinkPattern(raw) {
+    if (typeof raw !== "string" || !raw.trim()) {
+        return null;
+    }
+    let parsed;
+    try {
+        parsed = new URL(raw.trim());
+    } catch {
+        // Everything schemeless lands here, which is what "must name a scheme"
+        // means: `store.example.com/*` is a string somebody hoped would work.
+        return null;
+    }
+    if (EXTERNAL_LINK_PATTERN_DENIED_SCHEMES.includes(parsed.protocol.toLowerCase())) {
+        return null;
+    }
+    // `https://store.example.com@evil.test/` reads as the store and goes to the
+    // attacker, and no address a game hands a browser carries a password.
+    if (parsed.username || parsed.password) {
+        return null;
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (host && !splitWildcardHost(host)) {
+        return null;
+    }
+    const path = parsed.pathname;
+    // `scheme://*` is the one form that constrains nothing below the scheme. It
+    // exists because `steam://run/480` and `steam://store/480` are different
+    // *hosts* under one scheme, so "hand `steam:` addresses to Steam" has no
+    // other spelling.
+    const wholeScheme = host === "*"
+        && parsed.port === ""
+        && (path === "" || path === "/")
+        && parsed.search === ""
+        && parsed.hash === "";
+    return {
+        scheme: parsed.protocol.toLowerCase(),
+        host,
+        port: parsed.port,
+        path,
+        search: parsed.search,
+        hash: parsed.hash,
+        wholeScheme,
+    };
+}
+
+/**
+ * A canonical key for one pattern, or null when it is not a pattern.
+ *
+ * Only ever used to decide whether a manifest declared the same thing twice.
+ * What the manifest keeps is what the author wrote, because that string is what
+ * the install prompt shows.
+ */
+export function externalLinkPatternKey(pattern) {
+    const parsed = parseExternalLinkPattern(pattern);
+    if (!parsed) {
+        return null;
+    }
+    if (parsed.wholeScheme) {
+        return `${parsed.scheme}//*`;
+    }
+    const authority = parsed.host
+        ? `//${parsed.host}${parsed.port ? `:${parsed.port}` : ""}`
+        : "";
+    return `${parsed.scheme}${authority}${parsed.path}${parsed.search}${parsed.hash}`;
+}
+
+/** Whether a string can be declared as an address pattern at all. */
+export function isValidExternalLinkPattern(pattern) {
+    return externalLinkPatternKey(pattern) !== null;
+}
+
+/**
+ * Address patterns the plugin may hand to the player's browser or platform
+ * handler. Returns the number declared; pushes any problems onto `errors`.
+ *
+ * Unlike the contributed identifier lists these carry no plugin-id prefix: they
+ * name places in the world rather than things the plugin owns. Refusing a bad
+ * one here matters more than elsewhere, because this list becomes an install
+ * permission the author approves by name - a pattern that can never match would
+ * be approved as a power and then be none, and a script scheme would be approved
+ * as an address and not be one.
+ */
+function validateExternalLinks(value, pluginId, errors) {
+    if (value === undefined) {
+        return 0;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.externalLinks must be an array of address patterns");
+        return 0;
+    }
+    const seen = new Set();
+    for (const item of value) {
+        const pattern = typeof item === "string" ? item.trim() : "";
+        if (!pattern) {
+            errors.push(`contributes.externalLinks entries must be non-empty strings (plugin "${pluginId}")`);
+            continue;
+        }
+        const key = externalLinkPatternKey(pattern);
+        if (!key) {
+            errors.push(`contributes.externalLinks entry is not an address pattern: ${pattern}. `
+                + "It must be absolute and name a scheme, must not carry credentials, may use `*` "
+                + "only as a whole leading host label or as the entire host, and must not name "
+                + `any of: ${EXTERNAL_LINK_PATTERN_DENIED_SCHEMES.join(", ")}`);
+            continue;
+        }
+        if (seen.has(key)) {
+            errors.push(`contributes.externalLinks declares "${pattern}" more than once`);
+        }
+        seen.add(key);
+    }
+    return value.length;
+}
+
+/**
+ * Address patterns the plugin fetches from. Returns the number declared; pushes
+ * any problems onto `errors`.
+ *
+ * A port of Studio's `validateNetworkPatterns`. The external-link rules apply and
+ * two more sit on top, both because what comes back from a fetch runs inside the
+ * game while an opened page does not:
+ *
+ *  - `http(s)` only. There is no storefront scheme to make room for here.
+ *  - A host, and a written path. `https://api.example.com` is a pattern whose
+ *    path is exactly `/`, which is almost never what an author fetching from an
+ *    API meant - so it is refused with the spelling that does mean it rather
+ *    than rewritten into it. The manifest text and the text the author approves
+ *    at install have to be the same string.
+ */
+function validateNetworkPatterns(value, pluginId, errors) {
+    if (value === undefined) {
+        return 0;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.network must be an array of address patterns");
+        return 0;
+    }
+    const seen = new Set();
+    for (const item of value) {
+        const pattern = typeof item === "string" ? item.trim() : "";
+        if (!pattern) {
+            errors.push(`contributes.network entries must be non-empty strings (plugin "${pluginId}")`);
+            continue;
+        }
+        const key = externalLinkPatternKey(pattern);
+        if (!key) {
+            errors.push(`contributes.network entry is not an address pattern: ${pattern}. `
+                + "It must be absolute, must not carry credentials, and may use `*` only as a "
+                + "whole leading host label");
+            continue;
+        }
+        // A pattern with a key is one the URL parser took, so this cannot throw.
+        const parsed = new URL(pattern);
+        if (!NETWORK_PATTERN_SCHEMES.includes(parsed.protocol.toLowerCase())) {
+            errors.push(`contributes.network entry must be http or https: ${pattern}`);
+            continue;
+        }
+        if (!parsed.hostname || parsed.hostname === "*") {
+            errors.push(`contributes.network entry must name a host: ${pattern}`);
+            continue;
+        }
+        if (parsed.pathname === "/" && !parsed.search && !parsed.hash) {
+            errors.push(`contributes.network entry "${pattern}" names only the path "/". `
+                + `Write "${parsed.protocol}//${parsed.host}/*" for the whole host.`);
+            continue;
+        }
+        if (seen.has(key)) {
+            errors.push(`contributes.network declares "${pattern}" more than once`);
+        }
+        seen.add(key);
+    }
+    return value.length;
+}
+
 /** Returns the number of declared sidecars; pushes any problems onto `errors`. */
 function validateSidecars(value, pluginId, dependencyIds, errors) {
     if (value === undefined) {
@@ -361,8 +677,8 @@ function validateSidecars(value, pluginId, dependencyIds, errors) {
         if (kind !== "executable" && kind !== "node") {
             errors.push(`sidecar "${id}" kind must be "executable" or "node"`);
         }
-        if ((item.transport ?? SIDECAR_DEFAULTS.transport) !== "stdio-jsonl") {
-            errors.push(`sidecar "${id}" transport must be "stdio-jsonl"`);
+        if (!SIDECAR_TRANSPORTS.includes(item.transport ?? SIDECAR_DEFAULTS.transport)) {
+            errors.push(`sidecar "${id}" transport must be "jsonl"`);
         }
         const autostart = item.autostart ?? SIDECAR_DEFAULTS.autostart;
         if (autostart !== "onGameStart" && autostart !== "onRequest") {
@@ -460,6 +776,44 @@ function validateSidecars(value, pluginId, dependencyIds, errors) {
 }
 
 /**
+ * The plugin's name and description in the editor's languages. Pushes any
+ * problems onto `errors`. A port of Studio's `validateLocalized`.
+ *
+ * Keys use the locale-code shape of `contributes.locales`, which is every code
+ * Studio's language setting can hold. An entry that translates neither field is
+ * refused rather than dropped: it is almost always a misspelt key (`title`,
+ * `desc`), and dropping it would leave the author wondering why the plugin list
+ * still shows the plain name.
+ */
+function validateLocalized(value, errors) {
+    if (value === undefined) {
+        return;
+    }
+    if (!isRecord(value)) {
+        errors.push("localized must be an object keyed by locale code");
+        return;
+    }
+    for (const [code, entry] of Object.entries(value)) {
+        if (!LOCALE_CODE_PATTERN.test(code)) {
+            errors.push(`localized has an invalid locale code: ${code}`);
+            continue;
+        }
+        if (!isRecord(entry)) {
+            errors.push(`localized["${code}"] must be an object with name and/or description`);
+            continue;
+        }
+        const wrongType = ["name", "description"].filter(key => entry[key] !== undefined && typeof entry[key] !== "string");
+        if (wrongType.length) {
+            errors.push(...wrongType.map(key => `localized["${code}"].${key} must be a string`));
+            continue;
+        }
+        if (!readString(entry, "name") && !readString(entry, "description")) {
+            errors.push(`localized["${code}"] must declare a name or a description`);
+        }
+    }
+}
+
+/**
  * Port of Studio's validatePluginManifest.
  * Returns { ok: true, manifest } or { ok: false, errors: string[] }.
  */
@@ -498,6 +852,8 @@ export function validatePluginManifest(value) {
             errors.push(`icon must be one of: ${pluginIconExtensionList()}`);
         }
     }
+
+    validateLocalized(value.localized, errors);
 
     const entries = value.entries;
     if (!isRecord(entries)) {
@@ -589,16 +945,25 @@ export function validatePluginManifest(value) {
             // Build dependencies first: sidecar `dep:` includes resolve against them.
             const dependencyIds = validateBuildDependencies(value.contributes.buildDependencies, id, errors);
             const sidecars = validateSidecars(value.contributes.sidecars, id, dependencyIds, errors);
+            validateBuildConfig(value.contributes.buildConfig, id, errors);
+            const externalLinks = validateExternalLinks(value.contributes.externalLinks, id, errors);
+            const network = validateNetworkPatterns(value.contributes.network, id, errors);
 
-            // Capabilities and sidecars are powers of the *runtime* entry.
-            // Declaring them without one asks the user to approve something
-            // nothing can use.
+            // Capabilities, sidecars and addresses are powers of the *runtime*
+            // entry. Declaring them without one asks the user to approve
+            // something nothing can use.
             if (isRecord(entries) && typeof entries.runtime !== "string") {
                 if (capabilities > 0) {
                     errors.push("contributes.runtimeCapabilities requires a runtime entry");
                 }
                 if (sidecars > 0) {
                     errors.push("contributes.sidecars requires a runtime entry");
+                }
+                if (externalLinks > 0) {
+                    errors.push("contributes.externalLinks requires a runtime entry");
+                }
+                if (network > 0) {
+                    errors.push("contributes.network requires a runtime entry");
                 }
             }
         }
