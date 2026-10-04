@@ -27,6 +27,22 @@
       "description": "Semver. Must match package.json version."
     },
     "description": { "type": "string" },
+    "localized": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$" },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["name"], "properties": { "name": { "pattern": "\\S" } } },
+          { "required": ["description"], "properties": { "description": { "pattern": "\\S" } } }
+        ]
+      },
+      "description": "The name and description in the editor's languages, keyed by Studio's language code: zh, ja. Each field falls back to the plain one on its own, and codes match exactly, so a zh entry does not cover zh-x-neko. An entry must translate at least one of the two. The plain name stays the plugin's identity in command lines, project dependency lists and build logs."
+    },
     "publisher": { "type": "string" },
     "icon": {
       "type": "string",
