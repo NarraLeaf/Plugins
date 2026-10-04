@@ -1,7 +1,7 @@
 /**
  * Blueprint node definitions, shared by both plugin entries:
  * - main.tsx (studio) registers the full defs for the editor palette, reading
- *   the live catalog out of the editor tab's store.
+ *   the live catalog out of the panel's store.
  * - runtime.ts registers the same defs in game environments, reading the copy
  *   published with the game through `contributes.runtimeData`.
  *
@@ -474,7 +474,7 @@ export function createSteamAchievementNodes(
                 }
                 const id = readString(ctx.params?.[PARAM_APP_ID]) || await storeAppId(ctx);
                 if (!id) {
-                    return fail("No Steam App ID. Fill in \"Steam App ID\" on the Achievements tab, "
+                    return fail("No Steam App ID. Fill in \"Steam App ID\" on the Steam Achievements panel, "
                         + "or the node's own App ID.");
                 }
                 if (!APP_ID_PATTERN.test(id)) {

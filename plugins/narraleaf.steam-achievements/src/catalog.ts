@@ -161,7 +161,7 @@ export function carriedProgressMax(achievement: Achievement | null): number | nu
 
 /**
  * Coerce untrusted stored data into a well-formed catalog. Never throws: a
- * corrupt catalog degrades to fewer entries rather than breaking the editor tab
+ * corrupt catalog degrades to fewer entries rather than breaking the panel
  * or a running game.
  */
 export function normalizeCatalog(value: unknown): AchievementCatalog {
@@ -213,7 +213,7 @@ export type CatalogIssue = {
  * is achievements with no App ID: that ships, but a copy of the game started
  * outside Steam cannot reach it.
  *
- * `t` words the messages; the editor tab passes its translator, so they read in
+ * `t` words the messages; the panel passes its translator, so they read in
  * the editor's language.
  */
 export function validateCatalog(catalog: AchievementCatalog, t: Translate = translateEnglish): CatalogIssue[] {

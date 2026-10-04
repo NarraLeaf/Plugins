@@ -2,7 +2,7 @@
  * The plugin's own message tables, handed to `app.services.i18n.createTranslator`.
  *
  * Unrelated to Studio's own translations and to anything a player reads: this only
- * covers the words the plugin itself draws in the editor — the achievements tab,
+ * covers the words the plugin itself draws in the editor — the achievements panel,
  * the catalog checks and the blueprint node labels.
  *
  * Studio's built-in Chinese locale is `zh`; the aliases exist so a plugin-provided
@@ -13,30 +13,28 @@
 import type { PluginMessageBundle } from "narraleaf-studio/plugin";
 
 const en = {
-    "tab.title": "Achievements",
+    "panel.title": "Steam Achievements",
 
-    "toolbar.appId": "Steam App ID",
-    "toolbar.searchPlaceholder": "Search achievements",
-    "toolbar.errors": "{count} errors",
-    "toolbar.warnings": "{count} warnings",
-
-    "notice.steamworks": "Names, descriptions and icons are set in Steamworks. List each achievement here by its API Name in Steamworks.",
-    "notice.sync": "Achievements and stats are saved on the player's device. While Steam is running, preview and desktop builds also send them to Steam, including achievements earned while Steam was closed. Dev Mode, web and mobile builds do not connect to Steam.",
+    "appId.label": "Steam App ID",
+    "appId.sync": "Preview and desktop builds sync while Steam is running. Dev Mode, web and mobile builds keep progress on the device.",
 
     "achievements.title": "Achievements",
-    "achievements.add": "Achievement",
+    "achievements.add": "Add achievement",
     "achievements.apiName": "API Name",
     "achievements.empty": "No achievements",
-    "achievements.noMatches": "No matches",
+    "achievements.emptyHint": "Names, descriptions and icons are set in Steamworks.",
     "achievements.delete": "Delete achievement",
 
     "stats.title": "Stats",
-    "stats.add": "Stat",
+    "stats.add": "Add stat",
     "stats.apiName": "API Name",
     "stats.type": "Type",
+    "stats.typeInt": "Integer",
+    "stats.typeFloat": "Decimal",
     "stats.default": "Default",
-    "stats.min": "Min",
-    "stats.max": "Max",
+    "stats.min": "Minimum",
+    "stats.max": "Maximum",
+    "stats.unbounded": "None",
     "stats.incrementOnly": "Increment only",
     "stats.empty": "No stats",
     "stats.delete": "Delete stat",
@@ -91,31 +89,29 @@ export type Translate = (key: MessageKey, params?: Record<string, string | numbe
 // Typed against the English keys, so a key added to one table and not the other is a
 // compile error rather than an English string surfacing in the Chinese UI.
 const zh: Record<MessageKey, string> = {
-    "tab.title": "成就",
+    "panel.title": "Steam 成就",
 
-    "toolbar.appId": "Steam App ID",
-    "toolbar.searchPlaceholder": "搜索成就",
-    "toolbar.errors": "{count} 个错误",
-    "toolbar.warnings": "{count} 个警告",
-
-    "notice.steamworks": "成就的名称、描述和图标在 Steamworks 中设置。此处按 Steamworks 中的 API 名称列出每个成就",
-    "notice.sync": "成就与统计数据保存在玩家设备上。Steam 运行时，预览和桌面版游戏会同时写入 Steam，Steam 关闭期间获得的成就也会补写。开发模式、网页版和移动版不连接 Steam",
+    "appId.label": "Steam App ID",
+    "appId.sync": "预览和桌面版在 Steam 运行时同步。开发模式、网页版和移动版只保存在本机",
 
     "achievements.title": "成就",
     "achievements.add": "添加成就",
     "achievements.apiName": "API 名称",
     "achievements.empty": "暂无成就",
-    "achievements.noMatches": "无匹配结果",
+    "achievements.emptyHint": "名称、描述和图标在 Steamworks 中设置",
     "achievements.delete": "删除成就",
 
     "stats.title": "统计数据",
     "stats.add": "添加统计数据",
     "stats.apiName": "API 名称",
     "stats.type": "类型",
+    "stats.typeInt": "整数",
+    "stats.typeFloat": "小数",
     "stats.default": "默认值",
     "stats.min": "最小值",
     "stats.max": "最大值",
-    "stats.incrementOnly": "仅递增",
+    "stats.unbounded": "不限",
+    "stats.incrementOnly": "只增不减",
     "stats.empty": "暂无统计数据",
     "stats.delete": "删除统计数据",
 

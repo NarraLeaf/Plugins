@@ -26,8 +26,8 @@ describe("message tables", () => {
 
 describe("translateEnglish", () => {
     it("fills placeholders and leaves unknown ones in place", () => {
-        expect(translateEnglish("toolbar.errors", { count: 2 })).toBe("2 errors");
-        expect(translateEnglish("toolbar.errors")).toBe("{count} errors");
+        expect(translateEnglish("issue.duplicate", { id: "A" })).toBe("Duplicate API Name \"A\"");
+        expect(translateEnglish("issue.duplicate")).toBe("Duplicate API Name \"{id}\"");
     });
 });
 

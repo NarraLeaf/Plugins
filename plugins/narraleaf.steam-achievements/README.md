@@ -25,10 +25,12 @@ achievements nobody but your own interface can show them.
 
 ## What it adds
 
-**An achievements editor** — a full editor tab (opened from the left rail's
-trophy icon). It asks for what the game uses and nothing else: the Steam App ID,
-each achievement's API Name, and each stat's API Name, type, default and bounds.
-API Names are checked for the shape Steam accepts and for duplicates.
+**An achievements panel** — a side panel opened from the left rail's trophy
+icon, laid out like the Menu Bar panel: one row per achievement or stat, named by
+its API Name and opening onto its fields. It asks for what the game uses and
+nothing else: the Steam App ID, each achievement's API Name, and each stat's API
+Name, type, default and bounds. API Names are checked for the shape Steam accepts
+and for duplicates.
 
 An achievement's name, description, icons and hidden flag are set on the
 Steamworks partner site, and Steam draws them from there; they are not asked for
@@ -80,7 +82,7 @@ see [Known gaps](#known-gaps).
 
 ## The Steam App ID
 
-Type it into the achievements tab and you are done. Nothing has to be dropped
+Type it into the achievements panel and you are done. Nothing has to be dropped
 into a folder on disk, and there is no second App ID anywhere else.
 
 The field lives in the catalog, the plugin hands it to the native bridge on the
@@ -94,7 +96,7 @@ it describes the app actually running. A disagreement with the catalog is logged
 rather than acted on.
 
 `Open Store Page` with its App ID left blank opens the running game's own page:
-the App ID Steam reports when it is running, else the tab's. A demo is a separate
+the App ID Steam reports when it is running, else the panel's. A demo is a separate
 Steam app that Steam starts under the demo's App ID, so its blank node opens the
 demo's page; a "buy the full game" button in the demo names the full game's App
 ID on the node, the same way a DLC button names the DLC's.
