@@ -46,6 +46,7 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
     "buildConfig",
     "externalLinks",
     "network",
+    "widgetText",
 ];
 
 /**
@@ -648,6 +649,85 @@ function validateNetworkPatterns(value, pluginId, errors) {
     return value.length;
 }
 
+/** A widget prop name, as Studio's `WIDGET_PROP_NAME_PATTERN`. */
+const WIDGET_PROP_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** Props a drawing writes itself, as Studio's `RESERVED_WIDGET_TEXT_PROPS`. */
+export const RESERVED_WIDGET_TEXT_PROPS = ["runtimeTextOrigin", "runtimeTextUnit"];
+
+/**
+ * The props of each contributed widget that hold words a player reads. Pushes any problems onto
+ * `errors`. A port of Studio's `validateWidgetText`: each key must be a declared widget, each entry
+ * names a plain-identifier prop and optionally its key prop (`<prop>LocalizationKey` by default),
+ * a label, labels per locale and `multiline`; no name may be used twice in one widget.
+ */
+function validateWidgetText(value, widgets, errors) {
+    if (value === undefined) {
+        return;
+    }
+    if (!isRecord(value)) {
+        errors.push("contributes.widgetText must be an object keyed by widget type");
+        return;
+    }
+    for (const [type, raw] of Object.entries(value)) {
+        if (!widgets.includes(type)) {
+            errors.push(`contributes.widgetText names a widget not declared in contributes.widgets: ${type}`);
+            continue;
+        }
+        if (!Array.isArray(raw) || raw.length === 0) {
+            errors.push(`contributes.widgetText["${type}"] must be a non-empty array of text props`);
+            continue;
+        }
+        const claimed = new Set();
+        for (const item of raw) {
+            if (!isRecord(item)) {
+                errors.push(`contributes.widgetText["${type}"] entries must be objects with a prop`);
+                continue;
+            }
+            const prop = typeof item.prop === "string" ? item.prop.trim() : "";
+            if (!WIDGET_PROP_NAME_PATTERN.test(prop) || RESERVED_WIDGET_TEXT_PROPS.includes(prop)) {
+                errors.push(`contributes.widgetText["${type}"] has an invalid prop: ${JSON.stringify(item.prop)}`);
+                continue;
+            }
+            const keyProp = item.keyProp === undefined
+                ? `${prop}LocalizationKey`
+                : typeof item.keyProp === "string" ? item.keyProp.trim() : "";
+            if (!WIDGET_PROP_NAME_PATTERN.test(keyProp) || RESERVED_WIDGET_TEXT_PROPS.includes(keyProp)) {
+                errors.push(`contributes.widgetText["${type}"] prop "${prop}" has an invalid keyProp: ${JSON.stringify(item.keyProp)}`);
+                continue;
+            }
+            if (keyProp === prop) {
+                errors.push(`contributes.widgetText["${type}"] prop "${prop}" keeps its key in itself`);
+                continue;
+            }
+            for (const name of [prop, keyProp]) {
+                if (claimed.has(name)) {
+                    errors.push(`contributes.widgetText["${type}"] declares "${name}" more than once`);
+                }
+                claimed.add(name);
+            }
+            if (item.label !== undefined && typeof item.label !== "string") {
+                errors.push(`contributes.widgetText["${type}"] prop "${prop}" label must be a string`);
+            }
+            if (item.multiline !== undefined && typeof item.multiline !== "boolean") {
+                errors.push(`contributes.widgetText["${type}"] prop "${prop}" multiline must be true or false`);
+            }
+            if (item.localized !== undefined) {
+                if (!isRecord(item.localized)) {
+                    errors.push(`contributes.widgetText["${type}"] prop "${prop}" localized must be an object keyed by locale code`);
+                    continue;
+                }
+                for (const [code, label] of Object.entries(item.localized)) {
+                    if (!LOCALE_CODE_PATTERN.test(code)) {
+                        errors.push(`contributes.widgetText["${type}"] prop "${prop}" localized has an invalid locale code: ${code}`);
+                    } else if (typeof label !== "string" || !label.trim()) {
+                        errors.push(`contributes.widgetText["${type}"] prop "${prop}" localized["${code}"] must be a non-empty string`);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** Returns the number of declared sidecars; pushes any problems onto `errors`. */
 function validateSidecars(value, pluginId, dependencyIds, errors) {
     if (value === undefined) {
@@ -948,6 +1028,10 @@ export function validatePluginManifest(value) {
             validateBuildConfig(value.contributes.buildConfig, id, errors);
             const externalLinks = validateExternalLinks(value.contributes.externalLinks, id, errors);
             const network = validateNetworkPatterns(value.contributes.network, id, errors);
+            const declaredWidgets = Array.isArray(value.contributes.widgets)
+                ? value.contributes.widgets.filter(item => typeof item === "string").map(item => item.trim())
+                : [];
+            validateWidgetText(value.contributes.widgetText, declaredWidgets, errors);
 
             // Capabilities, sidecars and addresses are powers of the *runtime*
             // entry. Declaring them without one asks the user to approve

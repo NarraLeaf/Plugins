@@ -139,6 +139,31 @@
           "type": "array",
           "items": { "$ref": "#/definitions/networkPattern" },
           "description": "Address patterns the plugin fetches from. Requires a runtime entry. The list becomes its own install permission, apart from externalLinks, because what these hosts send back runs inside the game; a project that limits its network access to a list gets these added to it, attributed to the plugin."
+        },
+        "widgetText": {
+          "type": "object",
+          "description": "The props of each contributed widget that hold words a player reads, by widget type (each must be in widgets). Studio offers their words written directly or from a translation key, draws a key's words on the canvas, hands the renderer the words in the player's language, and puts them in the translation table. Derives no install permission.",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["prop"],
+              "additionalProperties": false,
+              "properties": {
+                "prop": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The prop holding the words." },
+                "keyProp": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The prop the translation key is kept in. <prop>LocalizationKey when absent." },
+                "label": { "type": "string", "description": "What the properties panel calls the words. The prop name when absent." },
+                "localized": {
+                  "type": "object",
+                  "description": "label per Studio locale code, matched exactly.",
+                  "propertyNames": { "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$" },
+                  "additionalProperties": { "type": "string", "minLength": 1 }
+                },
+                "multiline": { "type": "boolean", "description": "Whether the words may run over several lines." }
+              }
+            }
+          }
         }
       }
     },
