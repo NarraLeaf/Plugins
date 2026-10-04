@@ -1,28 +1,30 @@
 /**
- * Studio entry: the achievement editor.
+ * Studio entry: the achievements side panel.
  *
- * It is an **editor tab**, not a sidebar panel — an achievement is a row with an
- * API name, two icons, localized text and a progress binding, and that table
- * needs width the right rail does not have. The left rail keeps one icon whose
- * only job is to open the tab (`railAction`), which is how the dashboard does it.
+ * A panel rather than an editor tab. What the author keeps here is the Steam App
+ * ID and two short lists of API Names, and it is read most while wiring blueprint
+ * nodes - so it sits beside the graph instead of replacing it, the way the Menu
+ * Bar panel does.
  *
- * Layout note: the editor group clips its content host, so the tab sizes itself
- * to the host and brings its own scroller.
+ * It is laid out like that panel too: one accordion row per achievement or stat,
+ * named by its API Name, opening onto its fields; one "add" under each list;
+ * delete inside the row it removes. One row is open at a time across both lists.
+ *
+ * What a player sees of an achievement - its name, description and icons - is
+ * set on the Steamworks partner site and drawn by Steam, so it is not asked for
+ * here.
  *
  * Style note: a third-party plugin bundle is not scanned by Studio's Tailwind
  * build, so only utilities Studio itself already emits will have any effect.
- * Anything layout-specific (grid tracks, column widths) is therefore an inline
- * style, deliberately.
+ * Widths are therefore inline styles, deliberately.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Image, Plus, Trash2, Trophy, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Plus, Trash2, Trophy } from "lucide-react";
 import {
-    AssetType,
     PanelPosition,
     definePlugin,
     ui,
-    type Asset,
     type BlueprintInspectorParamSelectOption,
     type FreezeGuard,
     type PluginApp,
@@ -33,13 +35,10 @@ import {
     STEAM_API_NAME_PATTERN,
     emptyCatalog,
     issuesBySubject,
-    localizedText,
     normalizeCatalog,
     validateCatalog,
-    type Achievement,
     type AchievementCatalog,
     type CatalogIssue,
-    type LocaleCode,
     type SteamStat,
     type SteamStatType,
 } from "./catalog";
@@ -51,12 +50,11 @@ import {
 } from "./nodes";
 import { MESSAGES, type Translate } from "./i18n";
 
-const RAIL_ID = `${PLUGIN_ID}.rail`;
-const TAB_ID = `${PLUGIN_ID}.editor`;
+const PANEL_ID = `${PLUGIN_ID}.panel`;
 
-/** Achievement row tracks: icons, api name, name, description, hidden, progress, delete. */
-const ACHIEVEMENT_COLUMNS = "4.5rem 12rem minmax(9rem, 1fr) minmax(12rem, 1.6fr) 3rem 15rem 2rem";
-const STAT_COLUMNS = "12rem 7rem 7rem 7rem 7rem 5rem 2rem";
+/** Field widths, matching the Menu Bar panel's so a field fits beside its label one rail in. */
+const ID_FIELD_WIDTH = "10rem";
+const NUMBER_FIELD_WIDTH = "6rem";
 
 type CatalogStore = ReturnType<typeof createCatalogStore>;
 
@@ -73,7 +71,7 @@ function createCatalogStore(app: PluginApp) {
 
     const commit = async (next: AchievementCatalog) => {
         // Bail *before* touching memory, not after. A frozen project discards
-        // the write at the boundary, so mutating first would leave the tab
+        // the write at the boundary, so mutating first would leave the panel
         // showing a catalog the disk does not have — and the next thaw would
         // write that phantom over whatever version the author restored.
         if (app.services.workspace.frozen) {
@@ -105,31 +103,23 @@ function createCatalogStore(app: PluginApp) {
             };
         },
         getAchievementOptions: (): BlueprintInspectorParamSelectOption[] =>
-            catalog.achievements.map(achievement => ({
-                value: achievement.id,
-                label: localizedText(achievement.name, catalog.locales[0], catalog.locales) || achievement.id,
-            })),
+            catalog.achievements.map(achievement => ({ value: achievement.id, label: achievement.id })),
         getStatOptions: (): BlueprintInspectorParamSelectOption[] =>
             catalog.stats.map(stat => ({ value: stat.id, label: stat.id })),
-        patch: (patch: Partial<AchievementCatalog>) => commit({ ...catalog, ...patch }),
-        patchAchievement: (id: string, patch: Partial<Achievement>) => commit({
+        setAppId: (appId: string) => commit({ ...catalog, appId }),
+        renameAchievement: (index: number, id: string) => commit({
             ...catalog,
-            achievements: catalog.achievements.map(item => (item.id === id ? { ...item, ...patch } : item)),
+            achievements: catalog.achievements.map((item, at) => (at === index ? { ...item, id } : item)),
         }),
-        patchStat: (id: string, patch: Partial<SteamStat>) => commit({
+        patchStat: (index: number, patch: Partial<SteamStat>) => commit({
             ...catalog,
-            stats: catalog.stats.map(item => (item.id === id ? { ...item, ...patch } : item)),
+            stats: catalog.stats.map((item, at) => (at === index ? { ...item, ...patch } : item)),
         }),
         addAchievement: () => commit({
             ...catalog,
             achievements: [
                 ...catalog.achievements,
-                {
-                    id: uniqueId("ACHIEVEMENT", catalog.achievements.map(item => item.id)),
-                    name: {},
-                    description: {},
-                    hidden: false,
-                },
+                { id: uniqueId("ACHIEVEMENT", catalog.achievements.map(item => item.id)) },
             ],
         }),
         addStat: () => commit({
@@ -139,13 +129,13 @@ function createCatalogStore(app: PluginApp) {
                 { id: uniqueId("STAT", catalog.stats.map(item => item.id)), type: "int", defaultValue: 0 },
             ],
         }),
-        removeAchievement: (id: string) => commit({
+        removeAchievement: (index: number) => commit({
             ...catalog,
-            achievements: catalog.achievements.filter(item => item.id !== id),
+            achievements: catalog.achievements.filter((_, at) => at !== index),
         }),
-        removeStat: (id: string) => commit({
+        removeStat: (index: number) => commit({
             ...catalog,
-            stats: catalog.stats.filter(item => item.id !== id),
+            stats: catalog.stats.filter((_, at) => at !== index),
         }),
     };
 }
@@ -159,53 +149,30 @@ function uniqueId(prefix: string, taken: string[]): string {
     }
 }
 
-/* -------------------------------------------------------------------- tab */
+/* ------------------------------------------------------------------ panel */
 
-type IconSlot = "iconAchievedAssetId" | "iconUnachievedAssetId";
+/**
+ * Which row is open: an achievement or a stat, by position.
+ *
+ * By position rather than by API Name, so renaming the open row keeps it open and
+ * two rows that briefly share a name are still two rows.
+ */
+const achievementKey = (index: number) => `achievement:${index}`;
+const statKey = (index: number) => `stat:${index}`;
 
-function AchievementsTab({ app, store }: { app: PluginApp; store: CatalogStore }) {
+function AchievementsPanel({ app, store }: { app: PluginApp; store: CatalogStore }) {
     const [catalog, setCatalog] = useState<AchievementCatalog>(() => store.get());
-    const [locale, setLocale] = useState<LocaleCode>(() => store.get().locales[0]);
-    const [query, setQuery] = useState("");
-    const [newLocale, setNewLocale] = useState("");
-    const [iconTarget, setIconTarget] = useState<{ achievementId: string; slot: IconSlot } | null>(null);
-    const anchorRef = useRef<HTMLDivElement | null>(null);
-    // Only the writes are switched off. Searching, switching the display
-    // language and scrolling the table are the whole point of looking at a
-    // frozen version, so they stay live.
+    const [openKey, setOpenKey] = useState<string | null>(null);
+    // The row just added, whose name field takes focus so typing replaces the placeholder name.
+    const [addedKey, setAddedKey] = useState<string | null>(null);
     const freeze = ui.useFreezeGuard();
     const t = useTranslate(app);
 
     useEffect(() => store.subscribe(() => setCatalog({ ...store.get() })), [store]);
-    useEffect(() => {
-        if (!catalog.locales.includes(locale)) {
-            setLocale(catalog.locales[0]);
-        }
-    }, [catalog.locales, locale]);
 
     const issues = useMemo(() => validateCatalog(catalog, t), [catalog, t]);
     const bySubject = useMemo(() => issuesBySubject(issues), [issues]);
-    const errorCount = issues.filter(issue => issue.severity === "error").length;
-    const warningCount = issues.length - errorCount;
-
-    const achievements = useMemo(() => {
-        const needle = query.trim().toLowerCase();
-        if (!needle) {
-            return catalog.achievements;
-        }
-        return catalog.achievements.filter(achievement =>
-            achievement.id.toLowerCase().includes(needle) ||
-            Object.values(achievement.name).some(text => text.toLowerCase().includes(needle))
-        );
-    }, [catalog.achievements, query]);
-
-    const statOptions = useMemo(
-        () => [
-            { value: "", label: t("achievements.noProgress") },
-            ...catalog.stats.map(stat => ({ value: stat.id, label: stat.id })),
-        ],
-        [catalog.stats, t],
-    );
+    const catalogIssue = issues.find(issue => !issue.subjectId);
 
     const run = (action: Promise<void>) => {
         void action.catch((error: unknown) => {
@@ -213,470 +180,324 @@ function AchievementsTab({ app, store }: { app: PluginApp; store: CatalogStore }
         });
     };
 
-    const setLocalizedText = (achievement: Achievement, field: "name" | "description", text: string) => {
-        run(store.patchAchievement(achievement.id, { [field]: { ...achievement[field], [locale]: text } }));
+    const open = (key: string | null) => {
+        setOpenKey(key);
+        setAddedKey(null);
     };
 
-    const addLocale = () => {
-        const code = newLocale.trim();
-        if (!code || catalog.locales.includes(code)) {
-            return;
-        }
-        setNewLocale("");
-        setLocale(code);
-        run(store.patch({ locales: [...catalog.locales, code] }));
+    const add = (key: string, action: Promise<void>) => {
+        run(action);
+        setOpenKey(key);
+        setAddedKey(key);
     };
 
-    const target = iconTarget
-        ? catalog.achievements.find(item => item.id === iconTarget.achievementId)
-        : undefined;
+    const remove = (action: Promise<void>) => {
+        run(action);
+        open(null);
+    };
+
+    // One open row across both lists: each accordion is told whether the open key is one of its own.
+    const openIn = (prefix: string) => (openKey?.startsWith(prefix) ? [openKey] : []);
+    const onOpenChange = (items: string[]) => open(items[items.length - 1] ?? null);
 
     return (
-        <div className="flex h-full min-h-0 flex-col bg-surface text-fg">
-            <div className="flex flex-wrap items-center gap-2 border-b border-edge px-3 py-2">
-                {/* A draft, like every other field. Bound straight to the store,
-                    this wrote the whole catalog to disk on every keystroke. */}
-                <DraftInput
-                    value={catalog.appId ?? ""}
-                    placeholder={t("toolbar.appIdPlaceholder")}
-                    className="w-36"
-                    allowEmpty
-                    {...freeze.writes()}
-                    onCommit={appId => run(store.patch({ appId }))}
-                />
-                <ui.SearchInput
-                    size="sm"
-                    placeholder={t("toolbar.searchPlaceholder")}
-                    value={query}
-                    className="w-56"
-                    onChange={event => setQuery(event.target.value)}
-                />
-                <div className="flex items-center gap-1">
-                    <ui.Select
-                        size="sm"
-                        value={locale}
-                        options={catalog.locales.map(code => ({ value: code, label: code }))}
-                        onChange={value => setLocale(String(value))}
-                    />
-                    <ui.Input
-                        size="sm"
-                        value={newLocale}
-                        placeholder={t("toolbar.addLocalePlaceholder")}
-                        className="w-24"
-                        {...freeze.writes()}
-                        onChange={event => setNewLocale(event.target.value)}
-                        onKeyDown={freeze.run(event => {
-                            if (event.key === "Enter") {
-                                addLocale();
-                            }
-                        })}
-                    />
-                    <ui.IconButton
-                        size="sm"
-                        variant="ghost"
-                        aria-label={t("toolbar.removeLocale")}
-                        // The last language is not removable on its own account,
-                        // and that reason must survive a thaw.
-                        {...freeze.writes(catalog.locales.length < 2, t("toolbar.removeLocale"))}
-                        onClick={() => run(store.patch({
-                            locales: catalog.locales.filter(code => code !== locale),
-                        }))}
-                    >
-                        <X size={13} />
-                    </ui.IconButton>
-                </div>
-                <div className="flex-1" />
-                {(errorCount > 0 || warningCount > 0) && (
-                    <span className="text-xs">
-                        {errorCount > 0 && <span className="text-danger">{t("toolbar.errors", { count: errorCount })}</span>}
-                        {errorCount > 0 && warningCount > 0 && <span className="text-fg-subtle"> · </span>}
-                        {warningCount > 0 && <span className="text-warning">{t("toolbar.warnings", { count: warningCount })}</span>}
-                    </span>
-                )}
-                <ui.Button
-                    size="sm"
-                    variant="primary"
-                    {...freeze.writes()}
-                    onClick={() => run(store.addAchievement())}
-                >
-                    <Plus size={14} />
-                    {t("toolbar.addAchievement")}
-                </ui.Button>
-            </div>
+        <ui.Panel.Root>
+            <ui.Panel.Header title={t("panel.title")} />
 
-            <div className="min-h-0 flex-1 overflow-auto">
-                <div className="min-w-max">
-                    <HeaderRow
-                        columns={ACHIEVEMENT_COLUMNS}
-                        labels={[
-                            t("achievements.icons"),
-                            t("achievements.apiName"),
-                            t("achievements.name", { locale }),
-                            t("achievements.description", { locale }),
-                            t("achievements.hidden"),
-                            t("achievements.progress"),
-                            "",
-                        ]}
-                    />
-                    {achievements.length === 0 ? (
-                        <div className="px-3 py-6 text-xs text-fg-subtle">
-                            {catalog.achievements.length === 0 ? t("achievements.empty") : t("achievements.noMatches")}
-                        </div>
-                    ) : achievements.map(achievement => (
-                        <AchievementRow
-                            key={achievement.id}
-                            app={app}
-                            t={t}
-                            achievement={achievement}
-                            locale={locale}
-                            statOptions={statOptions}
-                            freeze={freeze}
-                            issues={bySubject.get(achievement.id) ?? []}
-                            onRename={id => run(store.patchAchievement(achievement.id, { id }))}
-                            onText={(field, text) => setLocalizedText(achievement, field, text)}
-                            onHidden={hidden => run(store.patchAchievement(achievement.id, { hidden }))}
-                            onProgress={progress => run(store.patchAchievement(achievement.id, { progress }))}
-                            onPickIcon={slot => setIconTarget({ achievementId: achievement.id, slot })}
-                            onClearIcon={slot => run(store.patchAchievement(achievement.id, { [slot]: undefined }))}
-                            onRemove={() => run(store.removeAchievement(achievement.id))}
-                        />
-                    ))}
-
-                    <div className="flex items-center gap-2 border-t border-edge px-3 py-2">
-                        <span className="text-xs font-semibold text-fg-muted">{t("stats.title")}</span>
-                        <ui.Button
-                            size="sm"
-                            variant="secondary"
-                            {...freeze.writes()}
-                            onClick={() => run(store.addStat())}
-                        >
-                            <Plus size={13} />
-                            {t("stats.add")}
-                        </ui.Button>
-                    </div>
-                    <HeaderRow
-                        columns={STAT_COLUMNS}
-                        labels={[
-                            t("stats.apiName"),
-                            t("stats.type"),
-                            t("stats.default"),
-                            t("stats.min"),
-                            t("stats.max"),
-                            t("stats.incrementOnly"),
-                            "",
-                        ]}
-                    />
-                    {catalog.stats.length === 0 ? (
-                        <div className="px-3 py-6 text-xs text-fg-subtle">{t("stats.empty")}</div>
-                    ) : catalog.stats.map(stat => (
-                        <StatRow
-                            key={stat.id}
-                            t={t}
-                            stat={stat}
-                            freeze={freeze}
-                            issues={bySubject.get(stat.id) ?? []}
-                            onPatch={patch => run(store.patchStat(stat.id, patch))}
-                            onRemove={() => run(store.removeStat(stat.id))}
-                        />
-                    ))}
-                </div>
-            </div>
-
-            <div ref={anchorRef} className="h-0 w-full" />
-            <ui.AssetSelector
-                visible={Boolean(iconTarget)}
-                assetType={AssetType.Image}
-                selectedIds={target && iconTarget ? [target[iconTarget.slot] ?? ""].filter(Boolean) : []}
-                anchorRef={anchorRef}
-                title={t(iconTarget?.slot === "iconUnachievedAssetId" ? "achievements.lockedIcon" : "achievements.unlockedIcon")}
-                onClose={() => setIconTarget(null)}
-                onConfirm={assets => {
-                    const picked = assets[0] as Asset | undefined;
-                    if (iconTarget && picked) {
-                        run(store.patchAchievement(iconTarget.achievementId, { [iconTarget.slot]: picked.id }));
-                    }
-                    setIconTarget(null);
-                }}
-            />
-        </div>
-    );
-}
-
-function HeaderRow({ columns, labels }: { columns: string; labels: string[] }) {
-    return (
-        <div
-            className="grid items-center gap-2 border-b border-edge px-3 py-1.5 text-xs text-fg-subtle"
-            style={{ gridTemplateColumns: columns }}
-        >
-            {labels.map((label, index) => <div key={index} className="truncate">{label}</div>)}
-        </div>
-    );
-}
-
-function AchievementRow({
-    app,
-    t,
-    achievement,
-    locale,
-    statOptions,
-    freeze,
-    issues,
-    onRename,
-    onText,
-    onHidden,
-    onProgress,
-    onPickIcon,
-    onClearIcon,
-    onRemove,
-}: {
-    app: PluginApp;
-    t: Translate;
-    achievement: Achievement;
-    locale: LocaleCode;
-    statOptions: { value: string; label: string }[];
-    freeze: FreezeGuard;
-    issues: CatalogIssue[];
-    onRename: (id: string) => void;
-    onText: (field: "name" | "description", text: string) => void;
-    onHidden: (hidden: boolean) => void;
-    onProgress: (progress: Achievement["progress"]) => void;
-    onPickIcon: (slot: IconSlot) => void;
-    onClearIcon: (slot: IconSlot) => void;
-    onRemove: () => void;
-}) {
-    const error = issues.find(issue => issue.severity === "error");
-    const warning = issues.find(issue => issue.severity === "warning");
-
-    return (
-        <div className="border-b border-edge-subtle px-3 py-1.5">
-            <div className="grid items-center gap-2" style={{ gridTemplateColumns: ACHIEVEMENT_COLUMNS }}>
-                <div className="flex items-center gap-1">
-                    <IconCell
-                        app={app}
-                        assetId={achievement.iconAchievedAssetId ?? null}
-                        title={t("achievements.unlockedIcon")}
-                        freeze={freeze}
-                        onPick={() => onPickIcon("iconAchievedAssetId")}
-                        onClear={() => onClearIcon("iconAchievedAssetId")}
-                    />
-                    <IconCell
-                        app={app}
-                        assetId={achievement.iconUnachievedAssetId ?? null}
-                        title={t("achievements.lockedIcon")}
-                        freeze={freeze}
-                        onPick={() => onPickIcon("iconUnachievedAssetId")}
-                        onClear={() => onClearIcon("iconUnachievedAssetId")}
-                    />
-                </div>
-                <DraftInput
-                    value={achievement.id}
-                    variant={STEAM_API_NAME_PATTERN.test(achievement.id) ? "default" : "error"}
-                    {...freeze.writes()}
-                    onCommit={onRename}
-                />
-                <DraftInput
-                    value={achievement.name[locale] ?? ""}
-                    {...freeze.writes()}
-                    onCommit={text => onText("name", text)}
-                    allowEmpty
-                />
-                <DraftInput
-                    value={achievement.description[locale] ?? ""}
-                    {...freeze.writes()}
-                    onCommit={text => onText("description", text)}
-                    allowEmpty
-                />
-                <ui.Switch
-                    size="sm"
-                    checked={achievement.hidden}
-                    {...freeze.writes()}
-                    onCheckedChange={onHidden}
-                />
-                <div className="flex items-center gap-1">
-                    <ui.Select
-                        size="sm"
-                        value={achievement.progress?.statId ?? ""}
-                        options={statOptions}
-                        portalMenu
-                        {...freeze.writes()}
-                        onChange={value => {
-                            const statId = String(value);
-                            onProgress(statId ? { statId, max: achievement.progress?.max ?? 0 } : undefined);
-                        }}
-                    />
-                    {achievement.progress && (
+            <ui.Panel.Row
+                label={t("appId.label")}
+                control={(
+                    <div style={{ width: ID_FIELD_WIDTH }}>
                         <DraftInput
-                            value={String(achievement.progress.max)}
-                            className="w-16"
+                            value={catalog.appId ?? ""}
+                            ariaLabel={t("appId.label")}
                             allowEmpty
                             {...freeze.writes()}
-                            onCommit={text => onProgress({
-                                statId: achievement.progress?.statId ?? "",
-                                max: Number.parseFloat(text) || 0,
-                            })}
+                            onCommit={appId => run(store.setAppId(appId))}
                         />
+                    </div>
+                )}
+            />
+            {catalogIssue && <div className="text-2xs text-warning">{catalogIssue.message}</div>}
+            <div className="pb-2 pt-1 text-2xs text-fg-subtle">{t("appId.sync")}</div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+                <ui.Panel.Section title={t("achievements.title")}>
+                    {catalog.achievements.length === 0 ? (
+                        <EmptyLine title={t("achievements.empty")} hint={t("achievements.emptyHint")} />
+                    ) : (
+                        <ui.Accordion
+                            multiple={false}
+                            disableAnimation
+                            openItems={openIn("achievement:")}
+                            onOpenChange={onOpenChange}
+                        >
+                            {catalog.achievements.map((achievement, index) => {
+                                const key = achievementKey(index);
+                                const error = (bySubject.get(achievement.id) ?? [])
+                                    .find(issue => issue.severity === "error");
+                                return (
+                                    <ui.AccordionItem
+                                        key={key}
+                                        id={key}
+                                        title={<RowTitle name={achievement.id} error={Boolean(error)} />}
+                                    >
+                                        <Rail>
+                                            <IdField
+                                                label={t("achievements.apiName")}
+                                                value={achievement.id}
+                                                error={error}
+                                                autoFocus={addedKey === key}
+                                                freeze={freeze}
+                                                onCommit={id => run(store.renameAchievement(index, id))}
+                                            />
+                                            <RemoveButton
+                                                label={t("achievements.delete")}
+                                                freeze={freeze}
+                                                onClick={() => remove(store.removeAchievement(index))}
+                                            />
+                                        </Rail>
+                                    </ui.AccordionItem>
+                                );
+                            })}
+                        </ui.Accordion>
                     )}
-                </div>
-                <ui.IconButton
-                    size="sm"
-                    variant="danger"
-                    aria-label={t("achievements.delete")}
-                    {...freeze.writes()}
-                    onClick={onRemove}
-                >
-                    <Trash2 size={13} />
-                </ui.IconButton>
+                    <AddButton
+                        label={t("achievements.add")}
+                        freeze={freeze}
+                        onClick={() => add(achievementKey(catalog.achievements.length), store.addAchievement())}
+                    />
+                </ui.Panel.Section>
+
+                <ui.Panel.Section title={t("stats.title")}>
+                    {catalog.stats.length === 0 ? (
+                        <EmptyLine title={t("stats.empty")} />
+                    ) : (
+                        <ui.Accordion
+                            multiple={false}
+                            disableAnimation
+                            openItems={openIn("stat:")}
+                            onOpenChange={onOpenChange}
+                        >
+                            {catalog.stats.map((stat, index) => {
+                                const key = statKey(index);
+                                const error = (bySubject.get(stat.id) ?? [])
+                                    .find(issue => issue.severity === "error");
+                                return (
+                                    <ui.AccordionItem
+                                        key={key}
+                                        id={key}
+                                        title={(
+                                            <RowTitle
+                                                name={stat.id}
+                                                error={Boolean(error)}
+                                                detail={statDetail(stat, t)}
+                                            />
+                                        )}
+                                    >
+                                        <Rail>
+                                            <StatFields
+                                                t={t}
+                                                stat={stat}
+                                                error={error}
+                                                autoFocus={addedKey === key}
+                                                freeze={freeze}
+                                                onPatch={patch => run(store.patchStat(index, patch))}
+                                            />
+                                            <RemoveButton
+                                                label={t("stats.delete")}
+                                                freeze={freeze}
+                                                onClick={() => remove(store.removeStat(index))}
+                                            />
+                                        </Rail>
+                                    </ui.AccordionItem>
+                                );
+                            })}
+                        </ui.Accordion>
+                    )}
+                    <AddButton
+                        label={t("stats.add")}
+                        freeze={freeze}
+                        onClick={() => add(statKey(catalog.stats.length), store.addStat())}
+                    />
+                </ui.Panel.Section>
             </div>
-            {(error ?? warning) && (
-                <div className={`text-xs ${error ? "text-danger" : "text-warning"}`}>
-                    {(error ?? warning)?.message}
-                    {issues.length > 1 && ` (+${issues.length - 1})`}
-                </div>
-            )}
+        </ui.Panel.Root>
+    );
+}
+
+/** A collapsed row: the API Name, in the danger colour while it is one Steam would refuse. */
+function RowTitle({ name, error, detail }: { name: string; error: boolean; detail?: string }) {
+    return (
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+            <span className={error ? "truncate text-2xs text-danger" : "truncate text-2xs"}>{name}</span>
+            {detail && <span className="ml-auto shrink-0 text-2xs text-fg-subtle">{detail}</span>}
+        </span>
+    );
+}
+
+/** What a stat row says while it is closed: its type, and that it only goes up when it does. */
+function statDetail(stat: SteamStat, t: Translate): string {
+    const type = t(stat.type === "float" ? "stats.typeFloat" : "stats.typeInt");
+    return stat.incrementOnly ? `${type} · ${t("stats.incrementOnly")}` : type;
+}
+
+/** The line that carries an open row's fields, indented past the row's own title. */
+function Rail({ children }: { children: React.ReactNode }) {
+    return <div className="ml-3 border-l border-edge pl-3">{children}</div>;
+}
+
+function EmptyLine({ title, hint }: { title: string; hint?: string }) {
+    return (
+        <div className="py-1">
+            <div className="text-2xs text-fg-muted">{title}</div>
+            {hint && <div className="pt-0.5 text-2xs text-fg-subtle">{hint}</div>}
         </div>
     );
 }
 
-function StatRow({
+function AddButton({ label, freeze, onClick }: { label: string; freeze: FreezeGuard; onClick: () => void }) {
+    return (
+        <div className="pt-1">
+            <ui.Button size="sm" variant="ghost" {...freeze.writes()} onClick={onClick}>
+                <Plus size={13} />
+                {label}
+            </ui.Button>
+        </div>
+    );
+}
+
+function RemoveButton({ label, freeze, onClick }: { label: string; freeze: FreezeGuard; onClick: () => void }) {
+    return (
+        <div className="pt-1">
+            <ui.Button size="sm" variant="ghost" {...freeze.writes()} onClick={onClick}>
+                <Trash2 size={12} />
+                {label}
+            </ui.Button>
+        </div>
+    );
+}
+
+/** An API Name field, with the reason beneath it whenever Steam would refuse the name. */
+function IdField({
+    label,
+    value,
+    error,
+    autoFocus,
+    freeze,
+    onCommit,
+}: {
+    label: string;
+    value: string;
+    error: CatalogIssue | undefined;
+    autoFocus: boolean;
+    freeze: FreezeGuard;
+    onCommit: (next: string) => void;
+}) {
+    return (
+        <>
+            <ui.Panel.Row
+                label={label}
+                control={(
+                    <div style={{ width: ID_FIELD_WIDTH }}>
+                        <DraftInput
+                            value={value}
+                            ariaLabel={label}
+                            variant={STEAM_API_NAME_PATTERN.test(value) ? "default" : "error"}
+                            autoFocus={autoFocus}
+                            {...freeze.writes()}
+                            onCommit={onCommit}
+                        />
+                    </div>
+                )}
+            />
+            {error && <div className="pb-1 text-2xs text-danger">{error.message}</div>}
+        </>
+    );
+}
+
+function StatFields({
     t,
     stat,
+    error,
+    autoFocus,
     freeze,
-    issues,
     onPatch,
-    onRemove,
 }: {
     t: Translate;
     stat: SteamStat;
+    error: CatalogIssue | undefined;
+    autoFocus: boolean;
     freeze: FreezeGuard;
-    issues: CatalogIssue[];
     onPatch: (patch: Partial<SteamStat>) => void;
-    onRemove: () => void;
 }) {
-    const error = issues.find(issue => issue.severity === "error");
-    const numberField = (
+    const numberRow = (
+        label: string,
         value: number | undefined,
         commit: (next: number | undefined) => void,
+        placeholder?: string,
     ) => (
-        <DraftInput
-            value={value === undefined ? "" : String(value)}
-            allowEmpty
-            {...freeze.writes()}
-            onCommit={text => {
-                const parsed = Number.parseFloat(text);
-                commit(text.trim() && Number.isFinite(parsed) ? parsed : undefined);
-            }}
+        <ui.Panel.Row
+            label={label}
+            control={(
+                <div style={{ width: NUMBER_FIELD_WIDTH }}>
+                    <DraftInput
+                        value={value === undefined ? "" : String(value)}
+                        ariaLabel={label}
+                        placeholder={placeholder}
+                        allowEmpty
+                        {...freeze.writes()}
+                        onCommit={text => {
+                            const parsed = Number.parseFloat(text);
+                            commit(text.trim() && Number.isFinite(parsed) ? parsed : undefined);
+                        }}
+                    />
+                </div>
+            )}
         />
     );
 
     return (
-        <div className="border-b border-edge-subtle px-3 py-1.5">
-            <div className="grid items-center gap-2" style={{ gridTemplateColumns: STAT_COLUMNS }}>
-                <DraftInput
-                    value={stat.id}
-                    variant={STEAM_API_NAME_PATTERN.test(stat.id) ? "default" : "error"}
-                    {...freeze.writes()}
-                    onCommit={id => onPatch({ id })}
-                />
-                <ui.Select
-                    size="sm"
-                    value={stat.type}
-                    portalMenu
-                    options={[
-                        { value: "int", label: "int" },
-                        { value: "float", label: "float" },
-                    ]}
-                    {...freeze.writes()}
-                    onChange={value => onPatch({ type: String(value) as SteamStatType })}
-                />
-                {numberField(stat.defaultValue, next => onPatch({ defaultValue: next ?? 0 }))}
-                {numberField(stat.min, next => onPatch({ min: next }))}
-                {numberField(stat.max, next => onPatch({ max: next }))}
-                <ui.Switch
-                    size="sm"
-                    checked={stat.incrementOnly === true}
-                    {...freeze.writes()}
-                    onCheckedChange={incrementOnly => onPatch({ incrementOnly })}
-                />
-                <ui.IconButton
-                    size="sm"
-                    variant="danger"
-                    aria-label={t("stats.delete")}
-                    {...freeze.writes()}
-                    onClick={onRemove}
-                >
-                    <Trash2 size={13} />
-                </ui.IconButton>
-            </div>
-            {error && <div className="text-xs text-danger">{error.message}</div>}
-        </div>
-    );
-}
-
-function IconCell({
-    app,
-    assetId,
-    title,
-    freeze,
-    onPick,
-    onClear,
-}: {
-    app: PluginApp;
-    assetId: string | null;
-    title: string;
-    freeze: FreezeGuard;
-    onPick: () => void;
-    onClear: () => void;
-}) {
-    const [url, setUrl] = useState<string | null>(null);
-
-    useEffect(() => {
-        let disposed = false;
-        let objectUrl: string | null = null;
-        const asset = assetId ? app.services.assets.get(AssetType.Image, assetId) : undefined;
-        if (!asset) {
-            setUrl(null);
-            return;
-        }
-        app.services.assets.createObjectUrl(asset)
-            .then(next => {
-                if (disposed) {
-                    app.services.assets.revokeObjectUrl(next);
-                    return;
-                }
-                objectUrl = next;
-                setUrl(next);
-            })
-            .catch(() => {
-                if (!disposed) {
-                    setUrl(null);
-                }
-            });
-        return () => {
-            disposed = true;
-            if (objectUrl) {
-                app.services.assets.revokeObjectUrl(objectUrl);
-            }
-        };
-    }, [app, assetId]);
-
-    return (
-        <button
-            type="button"
-            aria-label={title}
-            className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded border border-edge bg-surface-sunken"
-            {...freeze.writes(false, title)}
-            onClick={onPick}
-            // A handler the control hangs on itself, so `disabled` above is not
-            // the whole story — a right-click still reaches it. Guard it too.
-            onContextMenu={freeze.run(event => {
-                event.preventDefault();
-                onClear();
-            })}
-        >
-            {url
-                ? <img src={url} alt="" className="h-full w-full object-cover" />
-                : <Image size={13} className="text-fg-subtle" />}
-        </button>
+        <>
+            <IdField
+                label={t("stats.apiName")}
+                value={stat.id}
+                error={error}
+                autoFocus={autoFocus}
+                freeze={freeze}
+                onCommit={id => onPatch({ id })}
+            />
+            <ui.Panel.Row
+                label={t("stats.type")}
+                control={(
+                    <ui.Select
+                        size="sm"
+                        value={stat.type}
+                        options={[
+                            { value: "int", label: t("stats.typeInt") },
+                            { value: "float", label: t("stats.typeFloat") },
+                        ]}
+                        {...freeze.writes()}
+                        onChange={value => onPatch({ type: String(value) as SteamStatType })}
+                    />
+                )}
+            />
+            {numberRow(t("stats.default"), stat.defaultValue, next => onPatch({ defaultValue: next ?? 0 }))}
+            {numberRow(t("stats.min"), stat.min, next => onPatch({ min: next }), t("stats.unbounded"))}
+            {numberRow(t("stats.max"), stat.max, next => onPatch({ max: next }), t("stats.unbounded"))}
+            <ui.Panel.Row
+                label={t("stats.incrementOnly")}
+                control={(
+                    <ui.Switch
+                        size="sm"
+                        checked={stat.incrementOnly === true}
+                        aria-label={t("stats.incrementOnly")}
+                        {...freeze.writes()}
+                        onCheckedChange={incrementOnly => onPatch({ incrementOnly })}
+                    />
+                )}
+            />
+        </>
     );
 }
 
@@ -684,7 +505,7 @@ function IconCell({
  * The plugin's translator, re-rendering the caller on a language switch.
  *
  * The returned function changes identity with the locale, so a memo that words
- * its result (the catalog checks, the progress picker's "None") recomputes too.
+ * its result (the catalog checks) recomputes too.
  */
 function useTranslate(app: PluginApp): Translate {
     const translator = useMemo(() => app.services.i18n.createTranslator(MESSAGES), [app]);
@@ -706,8 +527,9 @@ function DraftInput({
     onCommit,
     allowEmpty = false,
     variant,
-    className,
     placeholder,
+    ariaLabel,
+    autoFocus,
     disabled,
     title,
 }: {
@@ -715,8 +537,10 @@ function DraftInput({
     onCommit: (next: string) => void;
     allowEmpty?: boolean;
     variant?: "default" | "error";
-    className?: string;
     placeholder?: string;
+    ariaLabel?: string;
+    /** Focus on mount with the text selected, so typing replaces a placeholder name. */
+    autoFocus?: boolean;
     /** Spread from `FreezeGuard.writes()` at every call site that edits the catalog. */
     disabled?: boolean;
     title?: string;
@@ -741,8 +565,10 @@ function DraftInput({
             size="sm"
             fullWidth
             variant={variant}
-            className={className}
             placeholder={placeholder}
+            aria-label={ariaLabel}
+            autoFocus={autoFocus}
+            onFocus={autoFocus ? event => event.currentTarget.select() : undefined}
             disabled={disabled}
             title={title}
             value={draft}
@@ -777,45 +603,27 @@ export default definePlugin({
         app.services.blueprintNodes.registerMany(createSteamAchievementNodes(() => store.get(), t));
 
         // Enrol in the pass Studio runs after a restore, a thaw, or entering a
-        // version view, so the tab and the node pickers show the version that is
+        // version view, so the panel and the node pickers show the version that is
         // actually on disk.
         const unregisterReloader = app.services.workspace.registerReloader(() => store.load());
 
-        // Worded on every open: a tab opened after a language switch takes the new title.
-        const openTab = () => {
-            app.services.ui.editors.open({
-                id: TAB_ID,
-                title: t("tab.title"),
-                icon: <Trophy size={14} />,
-                component: () => <AchievementsTab app={app} store={store} />,
-            });
-        };
-
-        const registerRail = () => app.services.ui.panels.register({
-            id: RAIL_ID,
-            title: t("tab.title"),
+        const unregisterPanel = app.services.ui.panels.register({
+            id: PANEL_ID,
+            // A getter, read at render: `t()` resolves against the live editor
+            // language, so a language switch re-titles the panel without
+            // registering it again.
+            get title() {
+                return t("panel.title");
+            },
             icon: <Trophy size={16} />,
             position: PanelPosition.Left,
-            railAction: openTab,
+            component: () => <AchievementsPanel app={app} store={store} />,
+            defaultVisible: false,
             order: 660,
-        });
-        let unregisterRail = registerRail();
-        // A panel title is a plain string read once per registration (`titleKey` only
-        // reaches Studio's own catalog), so following a language switch means
-        // registering the rail entry again. Chained, so the old entry is gone before
-        // the new one claims its id, however quickly the language changes.
-        let railSwap = Promise.resolve();
-        const stopFollowingLocale = app.services.i18n.onLocaleChange(() => {
-            railSwap = railSwap.then(async () => {
-                await unregisterRail();
-                unregisterRail = registerRail();
-            });
         });
 
         return async () => {
-            await stopFollowingLocale();
-            await railSwap;
-            await unregisterRail();
+            await unregisterPanel();
             unregisterReloader();
             unregisterAchievementOptions();
             unregisterStatOptions();

@@ -6,7 +6,7 @@
  *
  * Nothing here may import Studio internals. Plugin bundles only resolve
  * `narraleaf-studio/plugin` and `narraleaf-studio/runtime`, so shared vocabulary
- * (locale codes, wire formats) is spelled out literally.
+ * (wire formats, storage keys) is spelled out literally.
  */
 
 import { translateEnglish, type Translate } from "./i18n";
@@ -31,9 +31,6 @@ export const SIDECAR_ID = `${PLUGIN_ID}.bridge`;
 export const STORE_KEY_UNLOCKED = `${PLUGIN_ID}.unlocked`;
 export const STORE_KEY_STATS = `${PLUGIN_ID}.stats`;
 export const STORE_KEY_PROGRESS = `${PLUGIN_ID}.progress`;
-
-/** An editor locale code, e.g. `en` or `zh-CN`. */
-export type LocaleCode = string;
 
 /**
  * Steam API Names (achievements and stats alike) are ASCII identifiers. The
@@ -62,17 +59,19 @@ export type SteamStat = {
     incrementOnly?: boolean;
 };
 
+/**
+ * One achievement: its Steam API Name, and nothing the author would have to type twice.
+ *
+ * The name, description, icons and hidden flag a player sees are set on the Steamworks partner
+ * site, and Steam draws them from there. Version 0.1 asked for all of them here as well, per
+ * language, plus a stat to drive progress - and none of it reached Steam or the game. Those
+ * fields are no longer offered, but an entry that has them keeps them: they are the author's own
+ * words, and the index signature carries them through every edit untouched.
+ */
 export type Achievement = {
     /** Steam API Name. Matches {@link STEAM_API_NAME_PATTERN}. */
     id: string;
-    name: Record<LocaleCode, string>;
-    description: Record<LocaleCode, string>;
-    hidden: boolean;
-    /** Asset library ids; used by the Steamworks backend export, not by the game. */
-    iconAchievedAssetId?: string;
-    iconUnachievedAssetId?: string;
-    /** Turns this into a progress achievement: `Indicate Achievement Progress` drives the "3/10" toast. */
-    progress?: { statId: string; max: number };
+    readonly [carried: string]: unknown;
 };
 
 export const CATALOG_VERSION = 1 as const;
@@ -85,24 +84,13 @@ export type AchievementCatalog = {
      * App ID inherited from Steam's own launch environment still wins over this.
      */
     appId?: string;
-    /**
-     * Languages the achievement text is authored in.
-     *
-     * Authored here rather than read from the project because the studio plugin
-     * surface exposes no project settings — `app.services.i18n` is the *editor*
-     * language, which is a different thing entirely. See README "Known gaps".
-     */
-    locales: LocaleCode[];
     achievements: Achievement[];
     stats: SteamStat[];
 };
 
-export const DEFAULT_LOCALE: LocaleCode = "en";
-
 export function emptyCatalog(): AchievementCatalog {
     return {
         version: CATALOG_VERSION,
-        locales: [DEFAULT_LOCALE],
         achievements: [],
         stats: [],
     };
@@ -120,22 +108,6 @@ function readTrimmed(value: unknown): string {
 
 function readFiniteNumber(value: unknown, fallback: number): number {
     return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-/** Coerce an untrusted `Record<LocaleCode, string>` without dropping unknown locales. */
-function readLocalizedText(value: unknown): Record<LocaleCode, string> {
-    const record = readRecord(value);
-    if (!record) {
-        return {};
-    }
-    const out: Record<LocaleCode, string> = {};
-    for (const [locale, text] of Object.entries(record)) {
-        const code = locale.trim();
-        if (code && typeof text === "string") {
-            out[code] = text;
-        }
-    }
-    return out;
 }
 
 function normalizeStat(raw: unknown): SteamStat | null {
@@ -171,31 +143,25 @@ function normalizeAchievement(raw: unknown): Achievement | null {
     if (!record || !id) {
         return null;
     }
-    const achievement: Achievement = {
-        id,
-        name: readLocalizedText(record.name),
-        description: readLocalizedText(record.description),
-        hidden: record.hidden === true,
-    };
-    const iconAchieved = readTrimmed(record.iconAchievedAssetId);
-    const iconUnachieved = readTrimmed(record.iconUnachievedAssetId);
-    if (iconAchieved) {
-        achievement.iconAchievedAssetId = iconAchieved;
-    }
-    if (iconUnachieved) {
-        achievement.iconUnachievedAssetId = iconUnachieved;
-    }
-    const progress = readRecord(record.progress);
-    const statId = progress ? readTrimmed(progress.statId) : "";
-    if (progress && statId) {
-        achievement.progress = { statId, max: readFiniteNumber(progress.max, 0) };
-    }
-    return achievement;
+    return { ...record, id };
+}
+
+/**
+ * The progress maximum a version 0.1 catalog stored on the achievement, if any.
+ *
+ * `Indicate Achievement Progress` fell back to it when its `Max` pin was left empty, and a graph
+ * written then still relies on that; the node keeps reading it so those graphs go on drawing
+ * their toast.
+ */
+export function carriedProgressMax(achievement: Achievement | null): number | null {
+    const progress = achievement ? readRecord(achievement.progress) : null;
+    const max = progress ? progress.max : undefined;
+    return typeof max === "number" && Number.isFinite(max) && max > 0 ? max : null;
 }
 
 /**
  * Coerce untrusted stored data into a well-formed catalog. Never throws: a
- * corrupt catalog degrades to fewer entries rather than breaking the editor tab
+ * corrupt catalog degrades to fewer entries rather than breaking the panel
  * or a running game.
  */
 export function normalizeCatalog(value: unknown): AchievementCatalog {
@@ -203,21 +169,8 @@ export function normalizeCatalog(value: unknown): AchievementCatalog {
     if (!record) {
         return emptyCatalog();
     }
-    const locales: LocaleCode[] = [];
-    if (Array.isArray(record.locales)) {
-        for (const raw of record.locales) {
-            const code = readTrimmed(raw);
-            if (code && !locales.includes(code)) {
-                locales.push(code);
-            }
-        }
-    }
-    if (locales.length === 0) {
-        locales.push(DEFAULT_LOCALE);
-    }
     const catalog: AchievementCatalog = {
         version: CATALOG_VERSION,
-        locales,
         achievements: Array.isArray(record.achievements)
             ? record.achievements
                 .map(normalizeAchievement)
@@ -244,25 +197,6 @@ export function findStat(catalog: AchievementCatalog, id: string): SteamStat | n
     return wanted ? catalog.stats.find(item => item.id === wanted) ?? null : null;
 }
 
-/** Text for a locale, falling back to the first locale that has any. */
-export function localizedText(
-    text: Record<LocaleCode, string>,
-    locale: LocaleCode,
-    locales: LocaleCode[],
-): string {
-    const exact = text[locale];
-    if (exact && exact.trim()) {
-        return exact;
-    }
-    for (const code of locales) {
-        const candidate = text[code];
-        if (candidate && candidate.trim()) {
-            return candidate;
-        }
-    }
-    return "";
-}
-
 export type CatalogIssueSeverity = "error" | "warning";
 
 export type CatalogIssue = {
@@ -275,11 +209,11 @@ export type CatalogIssue = {
 /**
  * Author-time checks.
  *
- * Errors are things Steam will reject or that make a node unrunnable; warnings
- * are things that ship but read badly (an achievement with no text in a language
- * the game is released in shows up blank in the Steam overlay).
+ * Errors are names Steam will reject, or that two entries share. The one warning
+ * is achievements with no App ID: that ships, but a copy of the game started
+ * outside Steam cannot reach it.
  *
- * `t` words the messages; the editor tab passes its translator, so they read in
+ * `t` words the messages; the panel passes its translator, so they read in
  * the editor's language.
  */
 export function validateCatalog(catalog: AchievementCatalog, t: Translate = translateEnglish): CatalogIssue[] {
@@ -320,40 +254,6 @@ export function validateCatalog(catalog: AchievementCatalog, t: Translate = tran
             });
         }
         seenAchievements.add(achievement.id);
-
-        if (achievement.progress) {
-            if (!seenStats.has(achievement.progress.statId)) {
-                issues.push({
-                    severity: "error",
-                    subjectId: achievement.id,
-                    message: t("issue.progressUnknownStat", { id: achievement.progress.statId }),
-                });
-            }
-            if (!(achievement.progress.max > 0)) {
-                issues.push({
-                    severity: "error",
-                    subjectId: achievement.id,
-                    message: t("issue.progressMax"),
-                });
-            }
-        }
-
-        for (const locale of catalog.locales) {
-            if (!readTrimmed(achievement.name[locale])) {
-                issues.push({
-                    severity: "warning",
-                    subjectId: achievement.id,
-                    message: t("issue.missingName", { locale }),
-                });
-            }
-            if (!readTrimmed(achievement.description[locale])) {
-                issues.push({
-                    severity: "warning",
-                    subjectId: achievement.id,
-                    message: t("issue.missingDescription", { locale }),
-                });
-            }
-        }
     }
 
     if (catalog.achievements.length > 0 && !catalog.appId) {
