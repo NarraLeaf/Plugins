@@ -116,16 +116,16 @@ const BINARY_PLATFORMS = ["windows", "macos", "linux"];
 const BINARY_ARCHS = ["x64", "arm64", "universal"];
 
 /**
- * Newline-delimited JSON names the framing, not the channel: an executable sidecar's frames travel
- * over stdio, a node one's over the utility process's parent port. `stdio-jsonl` is the older
- * spelling from when there was only one channel it could mean, and manifests that say it keep
- * working - a published plugin is a file somebody already shipped.
+ * The one transport Studio accepts. Its validator refuses every other value at install, so this
+ * port refuses them too: a manifest this check passed and Studio refused is a published plugin
+ * nobody can install, which is how narraleaf.steam-achievements 0.2.0 shipped - it said `jsonl`, a
+ * spelling only this port had learned.
  */
-const SIDECAR_TRANSPORTS = ["jsonl", "stdio-jsonl"];
+const SIDECAR_TRANSPORTS = ["stdio-jsonl"];
 
 const SIDECAR_DEFAULTS = {
     kind: "executable",
-    transport: "jsonl",
+    transport: "stdio-jsonl",
     autostart: "onGameStart",
     startupTimeoutMs: 5000,
     shutdownTimeoutMs: 3000,
@@ -678,7 +678,7 @@ function validateSidecars(value, pluginId, dependencyIds, errors) {
             errors.push(`sidecar "${id}" kind must be "executable" or "node"`);
         }
         if (!SIDECAR_TRANSPORTS.includes(item.transport ?? SIDECAR_DEFAULTS.transport)) {
-            errors.push(`sidecar "${id}" transport must be "jsonl"`);
+            errors.push(`sidecar "${id}" transport must be "stdio-jsonl"`);
         }
         const autostart = item.autostart ?? SIDECAR_DEFAULTS.autostart;
         if (autostart !== "onGameStart" && autostart !== "onRequest") {
