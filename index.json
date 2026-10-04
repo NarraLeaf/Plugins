@@ -103,7 +103,7 @@
     {
       "id": "narraleaf.steam-achievements",
       "name": "Steam Achievements",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "description": "Unlock Steam achievements and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
       "publisher": "NarraLeaf Studio",
       "path": "plugins/narraleaf.steam-achievements",
@@ -144,11 +144,11 @@
       },
       "permissions": [],
       "release": {
-        "tag": "narraleaf.steam-achievements@0.2.0",
-        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.steam-achievements%400.2.0",
-        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.steam-achievements%400.2.0/narraleaf.steam-achievements-0.2.0.zip"
+        "tag": "narraleaf.steam-achievements@0.2.1",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.steam-achievements%400.2.1",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.steam-achievements%400.2.1/narraleaf.steam-achievements-0.2.1.zip"
       },
-      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/narraleaf.steam-achievements%400.2.0/plugins/narraleaf.steam-achievements/icon.png",
+      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/narraleaf.steam-achievements%400.2.1/plugins/narraleaf.steam-achievements/icon.png",
       "studioVersion": ">=1.0.0",
       "locales": {
         "zh-CN": {

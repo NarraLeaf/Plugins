@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "narraleaf.steam-achievements",
   "name": "Steam Achievements",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Unlock Steam achievements and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
   "localized": {
     "zh": {

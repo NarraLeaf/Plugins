@@ -1,6 +1,6 @@
 {
   "name": "@narraleaf-plugins/steam-achievements",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Unlock Steam achievements and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
   "license": "MPL-2.0",
