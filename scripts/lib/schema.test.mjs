@@ -24,6 +24,7 @@ import {
     PLUGIN_CONTRIBUTES_KEYS,
     PLUGIN_ENTRY_TARGETS,
     PLUGIN_RUNTIME_CAPABILITIES,
+    PLUGIN_STRUCT_FIELD_TYPES,
     repoRoot,
 } from "./plugins.mjs";
 
@@ -41,6 +42,11 @@ test("the schema lists every runtime capability the validator takes, and no othe
         sorted(schema.properties.contributes.properties.runtimeCapabilities.items.enum),
         sorted(PLUGIN_RUNTIME_CAPABILITIES),
     );
+});
+
+test("the schema's struct fields take the validator's field types, and no other", () => {
+    const field = schema.properties.contributes.properties.structs.items.properties.fields.items.properties;
+    assert.deepEqual(sorted(field.type.enum), sorted(PLUGIN_STRUCT_FIELD_TYPES));
 });
 
 test("the schema names the same entry targets", () => {

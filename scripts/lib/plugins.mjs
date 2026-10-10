@@ -47,7 +47,14 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
     "externalLinks",
     "network",
     "widgetText",
+    "structs",
 ];
+
+/**
+ * The field types a contributed struct may use: the ones a list's rows understand. Studio's
+ * `UI_STRUCT_FIELD_TYPES` in src/shared/types/ui-editor/struct.ts.
+ */
+export const PLUGIN_STRUCT_FIELD_TYPES = ["string", "number", "boolean", "image", "color", "json"];
 
 /**
  * Schemes no declaration may name, whatever it says. Studio refuses these in
@@ -728,6 +735,81 @@ function validateWidgetText(value, widgets, errors) {
     }
 }
 
+/**
+ * `contributes.structs`: the row shapes a plugin's nodes hand out, which a list in the author's
+ * project can then use as its row shape. Pushes any problems onto `errors`. A port of Studio's
+ * `validateStructContributions`: each entry has an id prefixed with the plugin id and not used
+ * twice, a name, at least one field, and optionally a name per locale; each field has a key, not
+ * used twice in the struct (a field is found by its key), and one of the field types a list
+ * understands. Derives no install permission, so it needs no runtime entry.
+ */
+function validateStructs(value, pluginId, errors) {
+    if (value === undefined) {
+        return;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.structs must be an array of struct objects");
+        return;
+    }
+    const seen = new Set();
+    for (const entry of value) {
+        if (!isRecord(entry)) {
+            errors.push("contributes.structs entries must be objects with an id, a name and fields");
+            continue;
+        }
+        const id = typeof entry.id === "string" ? entry.id.trim() : "";
+        // Without a valid plugin id there is nothing to check the prefix against; that is
+        // reported once, as the id's own error.
+        if (!id || (pluginId && !id.startsWith(`${pluginId}.`))) {
+            errors.push(`contributes.structs id must be prefixed with the plugin id: ${id || "(no id)"}`);
+            continue;
+        }
+        if (seen.has(id)) {
+            errors.push(`contributes.structs declares "${id}" more than once`);
+            continue;
+        }
+        seen.add(id);
+        const name = typeof entry.name === "string" ? entry.name.trim() : "";
+        if (!name) {
+            errors.push(`contributes.structs["${id}"] needs a name`);
+        }
+        if (!Array.isArray(entry.fields) || entry.fields.length === 0) {
+            errors.push(`contributes.structs["${id}"] needs at least one field`);
+        } else {
+            const keys = new Set();
+            for (const field of entry.fields) {
+                const key = isRecord(field) && typeof field.key === "string" ? field.key.trim() : "";
+                if (!key) {
+                    errors.push(`contributes.structs["${id}"] has a field with no key`);
+                    continue;
+                }
+                const type = isRecord(field) ? field.type : undefined;
+                if (!PLUGIN_STRUCT_FIELD_TYPES.includes(type)) {
+                    errors.push(`contributes.structs["${id}"] field "${key}" has an unsupported type: ${String(type)} `
+                        + `(allowed: ${PLUGIN_STRUCT_FIELD_TYPES.join(", ")})`);
+                }
+                if (keys.has(key)) {
+                    errors.push(`contributes.structs["${id}"] declares field "${key}" more than once`);
+                }
+                keys.add(key);
+            }
+        }
+        if (entry.localized !== undefined) {
+            if (!isRecord(entry.localized)) {
+                errors.push(`contributes.structs["${id}"] localized must be an object keyed by locale code`);
+                continue;
+            }
+            for (const [code, text] of Object.entries(entry.localized)) {
+                if (!LOCALE_CODE_PATTERN.test(code)) {
+                    errors.push(`contributes.structs["${id}"] localized has an invalid locale code: ${code}`);
+                } else if (typeof text !== "string" || !text.trim()) {
+                    errors.push(`contributes.structs["${id}"] localized["${code}"] must be a non-empty string`);
+                }
+            }
+        }
+    }
+}
+
 /** Returns the number of declared sidecars; pushes any problems onto `errors`. */
 function validateSidecars(value, pluginId, dependencyIds, errors) {
     if (value === undefined) {
@@ -1032,6 +1114,7 @@ export function validatePluginManifest(value) {
                 ? value.contributes.widgets.filter(item => typeof item === "string").map(item => item.trim())
                 : [];
             validateWidgetText(value.contributes.widgetText, declaredWidgets, errors);
+            validateStructs(value.contributes.structs, id, errors);
 
             // Capabilities, sidecars and addresses are powers of the *runtime*
             // entry. Declaring them without one asks the user to approve

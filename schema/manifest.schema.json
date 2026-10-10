@@ -164,6 +164,40 @@
               }
             }
           }
+        },
+        "structs": {
+          "type": "array",
+          "description": "Row shapes the plugin's nodes hand out, which a list in the author's project can use as its row shape. Each id is prefixed with the plugin id and declared once. Derives no install permission.",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "fields"],
+            "properties": {
+              "id": { "type": "string", "pattern": "\\S", "description": "Prefixed with the plugin id: <pluginId>.entry." },
+              "name": { "type": "string", "pattern": "\\S", "description": "What the editor calls the shape." },
+              "localized": {
+                "type": "object",
+                "description": "name per Studio locale code, matched exactly.",
+                "propertyNames": { "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$" },
+                "additionalProperties": { "type": "string", "pattern": "\\S" }
+              },
+              "fields": {
+                "type": "array",
+                "minItems": 1,
+                "description": "In the order the rows are read; the list's content editor shows them in this order. A field is found by its key, so no key twice.",
+                "items": {
+                  "type": "object",
+                  "required": ["key", "type"],
+                  "properties": {
+                    "key": { "type": "string", "pattern": "\\S", "description": "The field's id within the row." },
+                    "type": {
+                      "enum": ["string", "number", "boolean", "image", "color", "json"],
+                      "description": "One of the field types a list's rows understand."
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
