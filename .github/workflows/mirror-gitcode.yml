@@ -1,0 +1,72 @@
+name: Mirror to GitCode
+
+# Copies this repository - master, every tag, and every release's plugin zip - to
+# https://gitcode.com/NarraLeaf/Plugins. NarraLeaf Studio reads its plugin store from either side:
+# GitHub is unreachable or crawls from much of mainland China, and Studio ships GitCode as a
+# built-in second source that maps the catalogue's GitHub addresses onto it.
+#
+# The order keeps the GitCode catalogue honest: tags first, then each release's zip, and master
+# (whose index.json is the catalogue) only once GitCode serves every package it names. See the
+# header of .github/scripts/gitcode-mirror.mjs.
+#
+# When it runs:
+# - on every push to master;
+# - after release.yml publishes a release (it calls this workflow: a release created with the
+#   workflow's own token raises no `release` event for other workflows);
+# - when someone publishes a release by hand;
+# - by hand, from Actions > Mirror to GitCode > Run workflow.
+# Every run reconciles everything, so a run that was skipped or failed is caught up by the next.
+# Nothing a fork can trigger reaches the token: there is no pull_request trigger of any kind.
+#
+# GITCODE_TOKEN is a GitCode personal access token with read/write on Projects and Repository,
+# stored as a NarraLeaf organisation secret shared with this repository. It expires; a run that
+# fails with 401 needs a new one.
+on:
+  push:
+    branches: [master]
+  release:
+    types: [published]
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      GITCODE_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    name: Mirror to GitCode
+    if: github.repository == 'NarraLeaf/Plugins'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # One run at a time: two runs pushing the same refs would race. A queued run is enough, since
+    # each one reconciles the whole repository.
+    concurrency:
+      group: gitcode-mirror
+      cancel-in-progress: false
+    steps:
+      # The whole history and every tag, with master checked out whatever triggered the run: the
+      # mirror is of the publishing branch, not of the commit that happened to start this.
+      - uses: actions/checkout@v5
+        with:
+          ref: master
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Copy to GitCode
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/gitcode-mirror.mjs sync --branch master
+
+      # Reads the GitCode catalogue the way Studio does and checks every file it names.
+      - name: Check what GitCode serves
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/gitcode-mirror.mjs verify --branch master
