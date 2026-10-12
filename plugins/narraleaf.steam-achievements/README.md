@@ -39,7 +39,8 @@ here. A catalog authored with 0.1, which did ask for them, keeps them on disk.
 
 **An Unlock Steam Achievement story row**, under the scene editor's Tools. Pick it
 from the action menu and choose the achievement in the inspector, or type it
-straight into a line: `/unlock ACH_WIN_ONE_GAME`. The inspector lists the panel's
+straight into a line: `/unlock ACH_WIN_ONE_GAME` (`unlock` works whatever
+language Studio is in, and the name lands in the panel's spelling). The inspector lists the panel's
 achievements, the same list the nodes offer; a row naming one the panel no longer
 has shows it as missing. When the story reaches the row, it does what Unlock
 Achievement does — the unlock is saved on the device, and Steam hears of it when

@@ -26,10 +26,12 @@ import type { Translate } from "./i18n";
 export const UNLOCK_STORY_ACTION_ID = `${PLUGIN_ID}.story.unlock`;
 
 /**
- * `params` arrived on story action registrations in Studio 1.6. The published `narraleaf-studio`
- * types predate it, so the field is spelled out here; drop this once the types catch up.
+ * `keywords` and `params` arrived on story action registrations in Studio 1.6. The published
+ * `narraleaf-studio` types predate them, so the fields are spelled out here; drop this once the
+ * types catch up.
  */
 type StoryActionRegistration = StoryPluginActionRegistration & {
+    keywords?: readonly string[];
     params?: readonly ReturnType<typeof achievementParam>[];
 };
 
@@ -39,6 +41,9 @@ export function createUnlockStoryAction(readCatalog: CatalogReader, t: Translate
         id: UNLOCK_STORY_ACTION_ID,
         label: t("story.unlock.label"),
         detail: t("story.unlock.detail"),
+        // English, like a built-in command's own word: `/unlock ACH_WIN` works whatever language the
+        // label is in.
+        keywords: ["unlock", "achievement"],
         params: [achievementParam(t)],
         // `/unlock ACH_WIN` arrives with "ACH_WIN" as the initial text; a row picked from the
         // palette arrives with none and is given its achievement in the inspector.
