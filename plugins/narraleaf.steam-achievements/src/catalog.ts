@@ -192,27 +192,6 @@ export function findAchievement(catalog: AchievementCatalog, id: string): Achiev
     return wanted ? catalog.achievements.find(item => item.id === wanted) ?? null : null;
 }
 
-/**
- * The achievement a typed word names, for a story row written as `/unlock ACH_WIN`.
- *
- * Steam API Names are case-sensitive, so the catalog's own spelling wins over the typed one when the
- * two differ only in case: `ach_win` lands as `ACH_WIN`, the name Steam knows. A word that names no
- * catalog entry is kept as typed - the author wrote it, and the row's inspector lists it as missing
- * until they pick another - and an empty one names nothing.
- */
-export function resolveAchievementName(catalog: AchievementCatalog, text: string | undefined): string {
-    const wanted = (text ?? "").trim();
-    if (!wanted) {
-        return "";
-    }
-    const exact = findAchievement(catalog, wanted);
-    if (exact) {
-        return exact.id;
-    }
-    const folded = wanted.toLowerCase();
-    return catalog.achievements.find(item => item.id.toLowerCase() === folded)?.id ?? wanted;
-}
-
 export function findStat(catalog: AchievementCatalog, id: string): SteamStat | null {
     const wanted = id.trim();
     return wanted ? catalog.stats.find(item => item.id === wanted) ?? null : null;

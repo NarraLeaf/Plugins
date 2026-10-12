@@ -36,7 +36,6 @@ import {
     readProgress,
     readStats,
     readUnlocked,
-    recordUnlocked,
     steamStatus,
     writeProgress,
     writeStats,
@@ -51,7 +50,7 @@ export { PLUGIN_ID, CATALOG_NAMESPACE, SIDECAR_ID } from "./catalog";
 export const ACHIEVEMENT_OPTIONS_SOURCE = `${PLUGIN_ID}.achievements`;
 export const STAT_OPTIONS_SOURCE = `${PLUGIN_ID}.stats`;
 
-export const PARAM_ACHIEVEMENT = "achievementId";
+const PARAM_ACHIEVEMENT = "achievementId";
 const PARAM_STAT = "statId";
 const PIN_ACHIEVEMENT_ID = "achievementIdIn";
 const PIN_STAT_ID = "statIdIn";
@@ -117,7 +116,7 @@ function statIdIn(t: Translate) {
     } as const;
 }
 
-export function achievementParam(t: Translate) {
+function achievementParam(t: Translate) {
     return {
         key: PARAM_ACHIEVEMENT,
         label: t("param.achievement"),
@@ -135,7 +134,7 @@ function statParam(t: Translate) {
     };
 }
 
-export function readString(value: unknown): string {
+function readString(value: unknown): string {
     return typeof value === "string" ? value.trim() : "";
 }
 
@@ -223,7 +222,9 @@ export function createSteamAchievementNodes(
             inspectorParams: [achievementParam(t)],
             execute: async ctx => {
                 const id = resolveAchievementId(ctx);
-                await recordUnlocked(ctx.game, id);
+                const unlocked = await readUnlocked(ctx.game);
+                unlocked.add(id);
+                await writeUnlocked(ctx.game, unlocked);
                 await send(ctx, "achievements.unlock", { id });
                 return { nextPort: "next" };
             },

@@ -48,7 +48,6 @@ import {
     STAT_OPTIONS_SOURCE,
     createSteamAchievementNodes,
 } from "./nodes";
-import { createUnlockStoryAction } from "./story";
 import { MESSAGES, type Translate } from "./i18n";
 
 const PANEL_ID = `${PLUGIN_ID}.panel`;
@@ -602,8 +601,6 @@ export default definePlugin({
         // In the editor the catalog is the live store; the runtime entry reads
         // the copy published with the game instead.
         app.services.blueprintNodes.registerMany(createSteamAchievementNodes(() => store.get(), t));
-        // The story row picks from the same option source as the nodes, so it needs nothing of its own.
-        const unregisterStoryAction = app.services.story.actions.register(createUnlockStoryAction(() => store.get(), t));
 
         // Enrol in the pass Studio runs after a restore, a thaw, or entering a
         // version view, so the panel and the node pickers show the version that is
@@ -627,7 +624,6 @@ export default definePlugin({
 
         return async () => {
             await unregisterPanel();
-            await unregisterStoryAction();
             unregisterReloader();
             unregisterAchievementOptions();
             unregisterStatOptions();

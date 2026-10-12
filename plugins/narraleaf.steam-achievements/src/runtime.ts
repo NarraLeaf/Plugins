@@ -1,7 +1,7 @@
 /**
- * Runtime entry: registers the node execute bindings and the story rows' runners in
- * every game execution environment (Dev Mode window, Preview, Production, web
- * export). Editor palette metadata stays owned by the studio entry (main.tsx).
+ * Runtime entry: registers the node execute bindings in every game execution
+ * environment (Dev Mode window, Preview, Production, web export). Editor palette
+ * metadata stays owned by the studio entry (main.tsx).
  *
  * The Steam bridge is started here only when the player has already unlocked
  * something, so an achievement earned while Steam was closed reaches Steam as soon
@@ -14,7 +14,6 @@ import { defineRuntimePlugin } from "narraleaf-studio/runtime";
 import { connectIfUnlocked } from "./bridge";
 import { CATALOG_NAMESPACE, normalizeCatalog } from "./catalog";
 import { createSteamAchievementNodes } from "./nodes";
-import { createSteamStoryActions } from "./story";
 
 export default defineRuntimePlugin({
     setup(app) {
@@ -32,7 +31,6 @@ export default defineRuntimePlugin({
             return data;
         };
         app.game.blueprintNodes.registerMany(createSteamAchievementNodes(readCatalog));
-        app.game.storyActions.registerMany(createSteamStoryActions(readCatalog));
 
         // Not awaited: setup must not hold the game's start for a child process.
         connectIfUnlocked(app.game, normalizeCatalog(readCatalog()).appId ?? null).catch((error: unknown) => {

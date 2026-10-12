@@ -81,11 +81,6 @@ const en = {
     "param.stat": "Stat",
     "param.appId": "App ID",
     "param.dlcAppId": "DLC App ID",
-
-    "story.unlock.label": "Unlock Steam Achievement",
-    "story.unlock.detail": "Unlock an achievement listed in the Steam Achievements panel",
-    "story.unlock.row": "Unlock Steam achievement {id}",
-    "story.unlock.unassigned": "Unassigned",
 };
 
 export type MessageKey = keyof typeof en;
@@ -162,11 +157,6 @@ const zh: Record<MessageKey, string> = {
     "param.stat": "统计数据",
     "param.appId": "App ID",
     "param.dlcAppId": "DLC App ID",
-
-    "story.unlock.label": "解锁 Steam 成就",
-    "story.unlock.detail": "解锁 Steam 成就面板中列出的一项成就",
-    "story.unlock.row": "解锁 Steam 成就 {id}",
-    "story.unlock.unassigned": "未指定",
 };
 
 export const MESSAGES: PluginMessageBundle = {
