@@ -54,6 +54,16 @@ export async function writeUnlocked(game: Game, unlocked: Set<string>): Promise<
     await store(game)?.set(STORE_KEY_UNLOCKED, Array.from(unlocked));
 }
 
+/**
+ * Add one achievement to the mirror: the write every unlock makes, from a node or a story row,
+ * before it tells Steam.
+ */
+export async function recordUnlocked(game: Game, id: string): Promise<void> {
+    const unlocked = await readUnlocked(game);
+    unlocked.add(id);
+    await writeUnlocked(game, unlocked);
+}
+
 export async function readStats(game: Game): Promise<Record<string, number>> {
     const raw = await store(game)?.get<unknown>(STORE_KEY_STATS);
     const values: Record<string, number> = {};
