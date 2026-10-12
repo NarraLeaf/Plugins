@@ -113,6 +113,10 @@ describe("the editor half", () => {
         expect(create("   ")).toMatchObject({ payload: { params: {} } });
     });
 
+    it("answers to an English command word whatever language its label is in", () => {
+        expect(action().keywords).toEqual(["unlock", "achievement"]);
+    });
+
     it("offers the node's own achievement pick in the inspector", () => {
         expect(action().params).toEqual([
             { key: "achievementId", label: "Achievement", kind: "select", dynamicOptionsSource: `${PLUGIN_ID}.achievements` },
