@@ -1,8 +1,8 @@
 {
   "name": "@narraleaf-plugins/steam-achievements",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
-  "description": "Unlock Steam achievements and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
+  "description": "Unlock Steam achievements from the story or from blueprints, and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
   "license": "MPL-2.0",
   "type": "module",
   "keywords": [
@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
-    "narraleaf-studio": "^1.0.0",
+    "narraleaf-studio": "^1.6.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   },
@@ -34,11 +34,11 @@
       "integration",
       "blueprint"
     ],
-    "studioVersion": ">=1.0.0",
+    "studioVersion": ">=1.6.0",
     "locales": {
       "zh-CN": {
         "name": "Steam 成就",
-        "description": "通过蓝图解锁 Steam 成就并更新统计数据。进度保存在玩家设备上，桌面版游戏在 Steam 运行时同步到 Steam"
+        "description": "在故事中或通过蓝图解锁 Steam 成就，并通过蓝图更新统计数据。进度保存在玩家设备上，桌面版游戏在 Steam 运行时同步到 Steam"
       }
     }
   }
