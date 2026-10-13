@@ -25,18 +25,8 @@ import type { Translate } from "./i18n";
  */
 export const UNLOCK_STORY_ACTION_ID = `${PLUGIN_ID}.story.unlock`;
 
-/**
- * `keywords` and `params` arrived on story action registrations in Studio 1.6. The published
- * `narraleaf-studio` types predate them, so the fields are spelled out here; drop this once the
- * types catch up.
- */
-type StoryActionRegistration = StoryPluginActionRegistration & {
-    keywords?: readonly string[];
-    params?: readonly ReturnType<typeof achievementParam>[];
-};
-
 /** The editor half: what the palette offers, what a row reads as, and what its inspector edits. */
-export function createUnlockStoryAction(readCatalog: CatalogReader, t: Translate): StoryActionRegistration {
+export function createUnlockStoryAction(readCatalog: CatalogReader, t: Translate): StoryPluginActionRegistration {
     return {
         id: UNLOCK_STORY_ACTION_ID,
         label: t("story.unlock.label"),
