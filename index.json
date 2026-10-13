@@ -143,8 +143,8 @@
     {
       "id": "narraleaf.steam-achievements",
       "name": "Steam Achievements",
-      "version": "0.2.1",
-      "description": "Unlock Steam achievements and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
+      "version": "0.3.0",
+      "description": "Unlock Steam achievements from the story or from blueprints, and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
       "publisher": "NarraLeaf Studio",
       "path": "plugins/narraleaf.steam-achievements",
       "targets": [
@@ -184,16 +184,16 @@
       },
       "permissions": [],
       "release": {
-        "tag": "narraleaf.steam-achievements@0.2.1",
-        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.steam-achievements%400.2.1",
-        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.steam-achievements%400.2.1/narraleaf.steam-achievements-0.2.1.zip"
+        "tag": "narraleaf.steam-achievements@0.3.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/narraleaf.steam-achievements%400.3.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/narraleaf.steam-achievements%400.3.0/narraleaf.steam-achievements-0.3.0.zip"
       },
-      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/narraleaf.steam-achievements%400.2.1/plugins/narraleaf.steam-achievements/icon.png",
-      "studioVersion": ">=1.0.0",
+      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/narraleaf.steam-achievements%400.3.0/plugins/narraleaf.steam-achievements/icon.png",
+      "studioVersion": ">=1.6.0",
       "locales": {
         "zh-CN": {
           "name": "Steam 成就",
-          "description": "通过蓝图解锁 Steam 成就并更新统计数据。进度保存在玩家设备上，桌面版游戏在 Steam 运行时同步到 Steam"
+          "description": "在故事中或通过蓝图解锁 Steam 成就，并通过蓝图更新统计数据。进度保存在玩家设备上，桌面版游戏在 Steam 运行时同步到 Steam"
         }
       }
     },

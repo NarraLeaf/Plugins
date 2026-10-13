@@ -1,6 +1,7 @@
 # Steam Achievements
 
-Unlock Steam achievements and update stats from blueprint graphs.
+Unlock Steam achievements from the story, and unlock achievements and update stats
+from blueprint graphs.
 
 **Steam is optional.** Every write node updates a local mirror first and only
 then echoes to Steam; every read node reads the mirror. So the same script works
@@ -35,6 +36,16 @@ and for duplicates.
 An achievement's name, description, icons and hidden flag are set on the
 Steamworks partner site, and Steam draws them from there; they are not asked for
 here. A catalog authored with 0.1, which did ask for them, keeps them on disk.
+
+**An Unlock Steam Achievement story row**, under the scene editor's Tools. Pick it
+from the action menu and choose the achievement in the inspector, or type it
+straight into a line: `/unlock ACH_WIN_ONE_GAME` (`unlock` works whatever
+language Studio is in, and the name lands in the panel's spelling). The inspector lists the panel's
+achievements, the same list the nodes offer; a row naming one the panel no longer
+has shows it as missing. When the story reaches the row, it does what Unlock
+Achievement does — the unlock is saved on the device, and Steam hears of it when
+it is there — and the story moves on without waiting for Steam. Editing the
+achievement on a row needs Studio 1.6; the plugin requires it.
 
 **Eleven blueprint nodes**, all under the `Steam` category:
 
