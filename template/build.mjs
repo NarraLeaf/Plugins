@@ -80,3 +80,14 @@ if (typeof manifest.icon === "string" && manifest.icon.trim()) {
     fs.copyFileSync(path.join(root, ...relative), target);
     console.log(`copied ${manifest.icon}`);
 }
+
+// And a declared agent guide. Studio reads it out of the *installed* directory,
+// so a package that names one without carrying it installs cleanly and then
+// answers `agent_guide` with nothing.
+if (typeof manifest.contributes?.agentGuide === "string" && manifest.contributes.agentGuide.trim()) {
+    const relative = manifest.contributes.agentGuide.trim().split(/[\\/]+/);
+    const target = path.join(distDir, ...relative);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(path.join(root, ...relative), target);
+    console.log(`copied ${manifest.contributes.agentGuide}`);
+}

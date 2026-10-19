@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "narraleaf.steam-achievements",
   "name": "Steam Achievements",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Unlock Steam achievements from the story or from blueprints, and update stats from blueprints. Progress is saved on the player's device, and desktop builds send it to Steam whenever Steam is running.",
   "localized": {
     "zh": {
@@ -33,6 +33,15 @@
     "runtimeData": [
       "narraleaf.steam-achievements.catalog"
     ],
+    "agentTools": [
+      { "name": "narraleaf.steam-achievements.list", "write": false },
+      { "name": "narraleaf.steam-achievements.set_app_id", "write": true },
+      { "name": "narraleaf.steam-achievements.add_achievements", "write": true },
+      { "name": "narraleaf.steam-achievements.rename_achievements", "write": true },
+      { "name": "narraleaf.steam-achievements.remove_achievements", "write": true },
+      { "name": "narraleaf.steam-achievements.set_stats", "write": true }
+    ],
+    "agentGuide": "agent/guide.md",
     "runtimeCapabilities": [
       "store"
     ],

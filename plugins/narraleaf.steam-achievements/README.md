@@ -69,6 +69,35 @@ than the plugin's address permission). It never throws: a store link is not wort
 taking a running game down for. Leave its App ID blank for this build's own page,
 or fill in a DLC's to send the player there instead.
 
+**Six tools for AI agents** connected to Studio's MCP endpoint, so an agent
+building a game can declare the names Steam will be asked about without the
+author opening the panel. They are the same catalog behind a batch-shaped API,
+and each call is one step of undo:
+
+| Tool | |
+|---|---|
+| `narraleaf_steam_achievements__list` | the catalog, the App ID, and the panel's own validation (read) |
+| `…__set_app_id` | |
+| `…__add_achievements` | by API Name — that is all an entry holds |
+| `…__rename_achievements` | |
+| `…__remove_achievements` | |
+| `…__set_stats` | the whole stat list |
+
+They are as thin as the catalog is. There is nothing here to write an
+achievement's name, description, icons or hidden flag with, because those live on
+the partner site — so `list` says so outright and `add_achievements` ends by
+telling the agent to hand that part to the author. Nothing here unlocks anything
+either: every answer carries the line that a game unlocks from a story row or the
+blueprint node, because an agent that has just declared an achievement is a step
+from assuming otherwise. A frozen project **refuses** rather than dropping the
+write the way the panel does — for the author that silence is right, for an agent
+it reads as done.
+
+`agent/guide.md` ships with the package and is served as
+`agent_guide {chapter:"plugin:narraleaf.steam-achievements"}`. It carries the
+three-places split, the `/unlock` and blueprint recipes, the mirror's role, and
+the parts no tool can do.
+
 ## Owns DLC is for offering a purchase, never for gating content
 
 `Owns DLC` answers whether this account owns the DLC with that Steam App ID. Use
@@ -213,6 +242,11 @@ with the file and both hashes named.
   `int` or `float`. (A catalog authored while it existed keeps its values; those
   stats load as `float`.) Restoring it means first deciding what a session is in
   a visual novel, and giving the nodes a way to say so.
+- **The agent tools cannot set a build variant's App ID.** They set the
+  project-wide one, which is what the Steam connection is opened with. The
+  per-variant value exists for a demo, which is a different Steam app, and the
+  plugin surface only ever *reads* it, from a compiled build — so an author
+  shipping a demo fills that in themselves, in Build settings.
 - **No in-game achievement list.** The game knows which API Names are unlocked
   and their progress, but not their names, descriptions or icons, which live in
   Steamworks. An in-game list draws those from your own widgets.
