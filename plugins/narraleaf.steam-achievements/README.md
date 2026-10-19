@@ -1,23 +1,53 @@
 # Steam Achievements
 
-Author Steam achievements and stats in Studio, and unlock them from blueprint
-graphs.
+Unlock Steam achievements from the story, and unlock achievements and update stats
+from blueprint graphs.
 
 **Steam is optional.** Every write node updates a local mirror first and only
 then echoes to Steam; every read node reads the mirror. So the same script works
 on the Steam build, the itch build, the web export, Android, iOS, Dev Mode, and a
 dev machine with Steam closed. Degrading is the design, not a fallback.
 
+## What happens where
+
+| Where the game runs | Achievements and stats | Steam |
+|---|---|---|
+| Desktop build or preview, Steam running | saved on the device | written as they happen; achievements earned earlier with Steam closed are sent when the game starts |
+| Desktop build or preview, Steam closed | saved on the device | nothing; sent the next time the game starts with Steam running |
+| Dev Mode | saved with the project's Dev Mode data | never connects |
+| Web and mobile builds | saved on the device | never connects |
+
+On every row the nodes run and answer the same way. What changes is only whether
+Steam hears about it, so a player on the web, on mobile or on itch earns
+achievements nobody but your own interface can show them.
+
+`Steam Available` answers `false` on every row but the first. `Owns DLC` answers
+`Not Owned` wherever Steam cannot be asked.
+
 ## What it adds
 
-**An achievements editor** — a full editor tab (opened from the left rail's
-trophy icon), because the achievement table needs width the side panel does not
-have. Inline editing, icons picked from the asset library, one language at a time
-via the language switcher, and inline validation: API-name shape and uniqueness,
-progress achievements pointing at a stat that exists, and missing text in any
-language you have declared.
+**An achievements panel** — a side panel opened from the left rail's trophy
+icon, laid out like the Menu Bar panel: one row per achievement or stat, named by
+its API Name and opening onto its fields. It asks for what the game uses and
+nothing else: the Steam App ID, each achievement's API Name, and each stat's API
+Name, type, default and bounds. API Names are checked for the shape Steam accepts
+and for duplicates.
 
-**Ten blueprint nodes**, all under the `Steam` category:
+An achievement's name, description, icons and hidden flag are set on the
+Steamworks partner site, and Steam draws them from there; they are not asked for
+here. A catalog authored with 0.1, which did ask for them, keeps them on disk.
+
+**An Unlock Steam Achievement story row**, under the scene editor's Tools. Pick it
+from the action menu and choose the achievement in the inspector, or type it
+straight into a line: `/unlock ACH_WIN_ONE_GAME` (`unlock` works whatever
+language Studio is in, and the name lands in the panel's spelling). The inspector lists the panel's
+achievements, the same list the nodes offer; a row naming one the panel no longer
+has shows it as missing. When the story reaches the row, it does what Unlock
+Achievement does — the unlock is saved on the device, and Steam hears of it when
+it is there — and the story moves on without waiting for Steam. Editing the
+achievement on a row needs Studio 1.6; the plugin requires it.
+
+**Eleven blueprint nodes**, all under the `Steam` category:
 
 | Node | Local mirror | Steam |
 |---|---|---|
@@ -40,30 +70,33 @@ taking a running game down for. Leave its App ID blank for this build's own page
 or fill in a DLC's to send the player there instead.
 
 **Six tools for AI agents** connected to Studio's MCP endpoint, so an agent
-building a game can declare achievements and stats without the author opening the
-tab. They are the same catalog behind a batch-shaped API, and each call is one
-step of undo:
+building a game can declare the names Steam will be asked about without the
+author opening the panel. They are the same catalog behind a batch-shaped API,
+and each call is one step of undo:
 
 | Tool | |
 |---|---|
-| `narraleaf_steam_achievements__list` | the catalog, the App ID, the authored languages, and the editor's own validation (read) |
-| `…__set_settings` | the App ID and the languages text is authored in |
-| `…__add_achievements` | new achievements, icons resolved by asset id or exact name |
-| `…__update_achievements` | retext, rename, hide, re-icon, bind or unbind progress |
+| `narraleaf_steam_achievements__list` | the catalog, the App ID, and the panel's own validation (read) |
+| `…__set_app_id` | |
+| `…__add_achievements` | by API Name — that is all an entry holds |
+| `…__rename_achievements` | |
 | `…__remove_achievements` | |
 | `…__set_stats` | the whole stat list |
 
-Nothing there unlocks anything — the catalog is the declaration and the blueprint
-nodes are what award one at runtime, which every answer says in a line, because
-an agent that has just written an achievement is one step from assuming the game
-now awards it. `agent/guide.md` ships with the package and is served as
-`agent_guide {chapter:"plugin:narraleaf.steam-achievements"}`; it carries the
-unlock recipe, the progress-achievement recipe and the warning that Steam only
-knows an achievement the Steamworks backend also has under the same API Name.
+They are as thin as the catalog is. There is nothing here to write an
+achievement's name, description, icons or hidden flag with, because those live on
+the partner site — so `list` says so outright and `add_achievements` ends by
+telling the agent to hand that part to the author. Nothing here unlocks anything
+either: every answer carries the line that a game unlocks from a story row or the
+blueprint node, because an agent that has just declared an achievement is a step
+from assuming otherwise. A frozen project **refuses** rather than dropping the
+write the way the panel does — for the author that silence is right, for an agent
+it reads as done.
 
-This is what raises the plugin's floor to Studio **1.5.0**: `services.agent` is
-newer than the manifest key that declares the tools, and a Studio that predates
-either refuses the package at install rather than loading it without them.
+`agent/guide.md` ships with the package and is served as
+`agent_guide {chapter:"plugin:narraleaf.steam-achievements"}`. It carries the
+three-places split, the `/unlock` and blueprint recipes, the mirror's role, and
+the parts no tool can do.
 
 ## Owns DLC is for offering a purchase, never for gating content
 
@@ -89,8 +122,8 @@ see [Known gaps](#known-gaps).
 
 ## The Steam App ID
 
-Type it into the achievements tab and you are done. Nothing has to be dropped
-into a folder on disk.
+Type it into the achievements panel and you are done. Nothing has to be dropped
+into a folder on disk, and there is no second App ID anywhere else.
 
 The field lives in the catalog, the plugin hands it to the native bridge on the
 first call of a session, and the bridge publishes it to `SteamAPI_Init` itself —
@@ -102,17 +135,11 @@ When Steam launched the game it has already set `SteamAppId`, and *that* wins:
 it describes the app actually running. A disagreement with the catalog is logged
 rather than acted on.
 
-**The store link uses a second App ID, stated per build variant.** A demo is a
-separate Steam app from the game it demos, and the catalog holds one App ID for
-the whole project — so `contributes.buildConfig` declares an `appId` field with
-`scope: "variant"`, filled in on the build dialog's Plugins page. `Open Store
-Page` prefers it and reads the catalog's only when the variant states nothing;
-that fallback names the same app the Steam connection is opened with, and it is
-the only App ID that exists in Dev Mode, where builds have not happened yet.
-
-The Steam connection itself still uses the catalog's App ID. Pointing it at the
-variant's would change which Steam app a demo's achievements land in, which is a
-decision to make deliberately rather than inherit from a store link.
+`Open Store Page` with its App ID left blank opens the running game's own page:
+the App ID Steam reports when it is running, else the panel's. A demo is a separate
+Steam app that Steam starts under the demo's App ID, so its blank node opens the
+demo's page; a "buy the full game" button in the demo names the full game's App
+ID on the node, the same way a DLC button names the DLC's.
 
 ## Which platforms reach Steam
 
@@ -125,6 +152,17 @@ mirror-only build: every node still runs, every read still answers, nothing is
 echoed to Steam. That is already what happens on the web export and on mobile,
 which can never host a native child process, and on a desktop player who has
 Steam closed. There is one behaviour to reason about, and it is the mirror.
+
+Dev Mode never starts the bridge either; preview does, so preview is where a
+connection to Steam is first tried from Studio.
+
+**Achievements are replayed, stats are not.** Every time the bridge connects,
+it sends Steam each achievement the mirror holds, and the game starts the bridge
+as soon as it runs if the mirror holds any. Unlocking is idempotent on Steam's
+side, so this costs a few calls and settles every unlock earned while Steam was
+closed. A stat is an absolute value, and replaying this device's copy would
+overwrite a higher one Steam holds from another machine; a stat reaches Steam on
+its next write.
 
 ## Capabilities it asks for
 
@@ -191,12 +229,11 @@ with the file and both hashes named.
 
 ## Known gaps
 
-- **Release languages are authored here, not read from the project.** The studio
-  plugin surface exposes no project settings, so the catalog carries its own
-  `locales` list and validation checks against that.
-- **The editor tab is English only.** It ships no `contributes.locales` pack, so
-  its headers and buttons stay English whatever Studio is set to. The authored
-  achievement *text* is fully multilingual; only the chrome is not.
+- **Reads are this device's answer, not Steam's.** `Is Achievement Unlocked` and
+  `Get Stat` read the mirror, so a player who unlocked something on another
+  machine reads `false` here until it is unlocked again on this one. Nothing reads
+  Steam's state back into the mirror.
+- **The editor speaks English and Chinese.** Japanese editors see English.
 - **No `avgrate` stats.** Steam writes average-rate stats with
   `UpdateAvgRateStat(name, countThisSession, sessionLength)`, and no node here
   has a session length to give — so an `avgrate` stat could only ever reach the
@@ -205,18 +242,14 @@ with the file and both hashes named.
   `int` or `float`. (A catalog authored while it existed keeps its values; those
   stats load as `float`.) Restoring it means first deciding what a session is in
   a visual novel, and giving the nodes a way to say so.
-- **The agent tools cannot set a build variant's App ID.** They set the catalog's
+- **The agent tools cannot set a build variant's App ID.** They set the
   project-wide one, which is what the Steam connection is opened with. The
-  per-variant field exists for a demo, which is a different Steam app, and the
-  plugin surface only ever *reads* `contributes.buildConfig` — and only in the
-  runtime entry, from a compiled build. So an author shipping a demo fills that
-  field themselves, in Build settings.
-- **No Steamworks backend export yet.** Achievement schemas are entered on the
-  partner site; the export (VDF + 64x64 icons) needs a spike against the current
-  partner documentation and is deliberately not guessed at here. The 64x64 PNG
-  requirement is therefore not validated either.
-- **Icons never reach the game.** They exist for the backend export. In-game
-  achievement art should come from the gallery plugin or your own widgets.
+  per-variant value exists for a demo, which is a different Steam app, and the
+  plugin surface only ever *reads* it, from a compiled build — so an author
+  shipping a demo fills that in themselves, in Build settings.
+- **No in-game achievement list.** The game knows which API Names are unlocked
+  and their progress, but not their names, descriptions or icons, which live in
+  Steamworks. An in-game list draws those from your own widgets.
 - **Only `windows-x64` has been run against a real Steam client.** The macOS and
   Linux builds are wired up in CI and share every line of source, but their first
   release should be smoke-tested on those platforms before it is trusted.

@@ -1,7 +1,7 @@
 /**
- * The agent tools against a stand-in for Studio: that each write tool resolves what the agent
- * names, refuses the whole call when anything does not resolve, and commits exactly once — which is
- * what makes one call one step of undo once the host captures it.
+ * The agent tools against a stand-in for Studio: that each write tool commits exactly once — which
+ * is what makes one call one step of undo once the host captures it — and refuses the whole call,
+ * writing nothing, when any part of it is wrong.
  *
  * The schema case is the one that would otherwise only fail at load, inside Studio: a name the
  * manifest does not declare, a write flag that disagrees with it, or an input schema the host
@@ -16,13 +16,6 @@ import { CATALOG_VERSION, emptyCatalog, normalizeCatalog, type AchievementCatalo
 
 const PLUGIN_ID = "narraleaf.steam-achievements";
 
-const IMAGES = [
-    { id: "img-win", name: "ach_win.png", type: "image" },
-    { id: "img-locked", name: "ach_locked.png", type: "image" },
-    { id: "img-dup-a", name: "same.png", type: "image" },
-    { id: "img-dup-b", name: "same.png", type: "image" },
-];
-
 function setup(initial?: Partial<AchievementCatalog>, { frozen = false } = {}) {
     let catalog = normalizeCatalog({ ...emptyCatalog(), ...initial });
     const writes: AchievementCatalog[] = [];
@@ -33,15 +26,7 @@ function setup(initial?: Partial<AchievementCatalog>, { frozen = false } = {}) {
             writes.push(catalog);
         },
     };
-    const app = {
-        services: {
-            workspace: { frozen },
-            assets: {
-                list: () => IMAGES,
-                get: (_type: unknown, id: string) => IMAGES.find(asset => asset.id === id),
-            },
-        },
-    } as unknown as PluginApp;
+    const app = { services: { workspace: { frozen } } } as unknown as PluginApp;
     const tools = new Map(createSteamAgentTools(app, store).map(tool => [tool.name, tool]));
     const call = (name: string, args: Record<string, unknown>) =>
         (tools.get(name) as PluginAgentToolDef).handler(args, { clientName: null });
@@ -57,6 +42,10 @@ function refusal(result: unknown): { code?: string; message: string; hint?: stri
 
 function text(result: unknown): string {
     return typeof result === "object" && result !== null && "text" in result ? String((result as { text: string }).text) : "";
+}
+
+function data(result: unknown): Record<string, unknown> {
+    return (result as unknown as { data: Record<string, unknown> }).data;
 }
 
 /**
@@ -143,158 +132,123 @@ describe("the Steam plugin's agent tools", () => {
 
     it("say where unlocking actually happens, in every answer", async () => {
         const { call } = setup();
-        const list = await call(STEAM_AGENT_TOOLS.list, {});
-        const write = await call(STEAM_AGENT_TOOLS.setSettings, { appId: "480" });
-        for (const result of [list, write]) {
+        const results = [
+            await call(STEAM_AGENT_TOOLS.list, {}),
+            await call(STEAM_AGENT_TOOLS.setAppId, { appId: "480" }),
+            await call(STEAM_AGENT_TOOLS.addAchievements, { ids: ["ACH_ONE"] }),
+            await call(STEAM_AGENT_TOOLS.setStats, { stats: [] }),
+        ];
+        for (const result of results) {
+            expect(text(result)).toContain("/unlock ACH_NAME");
             expect(text(result)).toContain("Unlock Achievement blueprint node");
         }
-        expect(text(list)).toContain("Steamworks backend");
     });
 
-    it("add achievements in one write, resolving icons by name and by id", async () => {
-        const { call, writes, current } = setup({ stats: [{ id: "EndingsSeen", type: "int", defaultValue: 0 }] });
-        const result = await call(STEAM_AGENT_TOOLS.addAchievements, {
-            achievements: [
-                { id: "ACH_FIRST", name: "First words", description: { en: "You said it." }, iconAchieved: "ach_win", iconUnachieved: "img-locked" },
-                { id: "ACH_ALL", name: { en: "Completionist" }, hidden: true, progress: { stat: "EndingsSeen", max: 4 } },
-            ],
-        });
-        expect(text(result)).toContain("Added 2 achievements");
+    it("say, in list, that the text players read lives in the Steamworks backend", async () => {
+        const { call } = setup();
+        const answer = text(await call(STEAM_AGENT_TOOLS.list, {}));
+        expect(answer).toContain("partner.steamgames.com");
+        expect(answer).toContain("name, description, icons and hidden flag");
+    });
+
+    it("declare achievements in one write", async () => {
+        const { call, writes, current } = setup();
+        const result = await call(STEAM_AGENT_TOOLS.addAchievements, { ids: ["ACH_FIRST", "ACH_ALL"] });
+        expect(text(result)).toContain("Declared 2 achievements");
+        expect(text(result)).toContain("Steamworks backend");
         expect(writes).toHaveLength(1);
-        const [first, all] = current().achievements;
-        expect(first).toMatchObject({
-            id: "ACH_FIRST",
-            name: { en: "First words" },
-            description: { en: "You said it." },
-            hidden: false,
-            iconAchievedAssetId: "img-win",
-            iconUnachievedAssetId: "img-locked",
-        });
-        expect(all).toMatchObject({ id: "ACH_ALL", hidden: true, progress: { statId: "EndingsSeen", max: 4 } });
+        expect(current().achievements).toEqual([{ id: "ACH_FIRST" }, { id: "ACH_ALL" }]);
         expect(current().version).toBe(CATALOG_VERSION);
     });
 
-    it("refuse the whole call, writing nothing, when one achievement is wrong", async () => {
+    it("refuse the whole call, writing nothing, when one name is wrong", async () => {
         const cases: [string, Record<string, unknown>, string][] = [
-            ["a name Steam would reject", { achievements: [{ id: "ACH_FRESH" }, { id: "no spaces here" }] }, "not a Steam API Name"],
-            ["an id already in the catalog", { achievements: [{ id: "ACH_OK" }] }, "already has an achievement"],
-            ["the same id twice in one call", { achievements: [{ id: "ACH_NEW" }, { id: "ACH_NEW" }] }, "already has an achievement"],
-            ["an icon nothing matches", { achievements: [{ id: "ACH_NEW", iconAchieved: "no_such_icon" }] }, "no image asset"],
-            ["an icon two assets share", { achievements: [{ id: "ACH_NEW", iconAchieved: "same.png" }] }, "names 2 image assets"],
-            ["progress on a stat that does not exist", { achievements: [{ id: "ACH_NEW", progress: { stat: "Nope", max: 3 } }] }, "no stat in the catalog"],
-            ["progress with no ceiling", { achievements: [{ id: "ACH_NEW", progress: { stat: "EndingsSeen", max: 0 } }] }, "above zero"],
+            ["a name Steam would reject", { ids: ["ACH_NEW", "no spaces here"] }, "not a Steam API Name"],
+            ["a name already declared", { ids: ["ACH_OK"] }, "already has an achievement"],
+            ["the same name twice in one call", { ids: ["ACH_NEW", "ACH_NEW"] }, "already has an achievement"],
+            ["an empty name", { ids: [""] }, "is required"],
+            ["a name over 44 characters", { ids: [`ACH_${"X".repeat(45)}`] }, "not a Steam API Name"],
+            ["no names at all", { ids: [] }, "non-empty array"],
         ];
         for (const [label, args, expected] of cases) {
-            const { call, writes } = setup({
-                achievements: [{ id: "ACH_OK", name: {}, description: {}, hidden: false }],
-                stats: [{ id: "EndingsSeen", type: "int", defaultValue: 0 }],
-            });
-            const error = refusal(await call(STEAM_AGENT_TOOLS.addAchievements, args));
-            expect(error?.message, label).toContain(expected);
+            const { call, writes } = setup({ achievements: [{ id: "ACH_OK" }] });
+            expect(refusal(await call(STEAM_AGENT_TOOLS.addAchievements, args))?.message, label).toContain(expected);
             expect(writes, label).toHaveLength(0);
         }
     });
 
-    it("fold update text in per language, and clear a language with an empty string", async () => {
-        const { call, current } = setup({
-            locales: ["en", "zh-CN"],
-            achievements: [{ id: "ACH_ONE", name: { en: "One", "zh-CN": "一" }, description: { en: "First" }, hidden: false }],
+    it("rename achievements, keeping what a 0.1 catalog carried on the entry", async () => {
+        const { call, writes, current } = setup({
+            achievements: [{ id: "ACH_OLD", name: { en: "Old words" }, hidden: true }],
         });
-        await call(STEAM_AGENT_TOOLS.updateAchievements, {
-            achievements: [{ id: "ACH_ONE", name: { "zh-CN": "第一" }, description: { en: "" } }],
-        });
-        expect(current().achievements[0]).toMatchObject({ name: { en: "One", "zh-CN": "第一" }, description: {} });
-    });
-
-    it("rename an achievement and say the backend has to be renamed too", async () => {
-        const { call, current } = setup({ achievements: [{ id: "ACH_OLD", name: {}, description: {}, hidden: false }] });
-        const result = await call(STEAM_AGENT_TOOLS.updateAchievements, { achievements: [{ id: "ACH_OLD", newId: "ACH_NEW" }] });
-        expect(current().achievements.map(achievement => achievement.id)).toEqual(["ACH_NEW"]);
+        const result = await call(STEAM_AGENT_TOOLS.renameAchievements, { renames: [{ id: "ACH_OLD", newId: "ACH_NEW" }] });
+        expect(writes).toHaveLength(1);
+        expect(current().achievements).toEqual([{ id: "ACH_NEW", name: { en: "Old words" }, hidden: true }]);
+        // Both the places a rename has to be repeated, in the answer rather than only in the guide.
         expect(text(result)).toContain("Steamworks backend");
+        expect(text(result)).toContain("story row or node");
     });
 
-    it("unbind progress on null, and bind it on an object", async () => {
-        const { call, current } = setup({
-            achievements: [{ id: "ACH_P", name: {}, description: {}, hidden: false, progress: { statId: "Count", max: 5 } }],
-            stats: [{ id: "Count", type: "int", defaultValue: 0 }],
-        });
-        await call(STEAM_AGENT_TOOLS.updateAchievements, { achievements: [{ id: "ACH_P", progress: null }] });
-        expect(current().achievements[0]!.progress).toBeUndefined();
-        await call(STEAM_AGENT_TOOLS.updateAchievements, { achievements: [{ id: "ACH_P", progress: { stat: "Count", max: 7 } }] });
-        expect(current().achievements[0]!.progress).toEqual({ statId: "Count", max: 7 });
-    });
-
-    it("clear an icon with an empty string", async () => {
-        const { call, current } = setup({
-            achievements: [{ id: "ACH_I", name: {}, description: {}, hidden: false, iconAchievedAssetId: "img-win" }],
-        });
-        await call(STEAM_AGENT_TOOLS.updateAchievements, { achievements: [{ id: "ACH_I", iconAchieved: "" }] });
-        expect(current().achievements[0]!.iconAchievedAssetId).toBeUndefined();
-    });
-
-    it("refuse an update or a removal naming an achievement the catalog does not have", async () => {
-        const { call, writes } = setup({ achievements: [{ id: "ACH_ONE", name: {}, description: {}, hidden: false }] });
-        expect(refusal(await call(STEAM_AGENT_TOOLS.updateAchievements, { achievements: [{ id: "ACH_TWO" }] }))?.code).toBe("not_found");
-        expect(refusal(await call(STEAM_AGENT_TOOLS.removeAchievements, { ids: ["ACH_ONE", "ACH_TWO"] }))?.code).toBe("not_found");
+    it("refuse a rename onto a name the catalog already has, or from one it does not", async () => {
+        const { call, writes } = setup({ achievements: [{ id: "ACH_ONE" }, { id: "ACH_TWO" }] });
+        expect(refusal(await call(STEAM_AGENT_TOOLS.renameAchievements, { renames: [{ id: "ACH_ONE", newId: "ACH_TWO" }] }))?.message)
+            .toContain("already has an achievement");
+        expect(refusal(await call(STEAM_AGENT_TOOLS.renameAchievements, { renames: [{ id: "ACH_NONE", newId: "ACH_X" }] }))?.code)
+            .toBe("not_found");
         expect(writes).toHaveLength(0);
     });
 
-    it("remove achievements in one write", async () => {
-        const { call, writes, current } = setup({
-            achievements: [
-                { id: "ACH_ONE", name: {}, description: {}, hidden: false },
-                { id: "ACH_TWO", name: {}, description: {}, hidden: false },
-            ],
-        });
+    it("remove achievements in one write, and refuse one the catalog does not have", async () => {
+        const { call, writes, current } = setup({ achievements: [{ id: "ACH_ONE" }, { id: "ACH_TWO" }] });
+        expect(refusal(await call(STEAM_AGENT_TOOLS.removeAchievements, { ids: ["ACH_ONE", "ACH_NONE"] }))?.code).toBe("not_found");
+        expect(writes).toHaveLength(0);
         await call(STEAM_AGENT_TOOLS.removeAchievements, { ids: ["ACH_ONE"] });
         expect(writes).toHaveLength(1);
-        expect(current().achievements.map(achievement => achievement.id)).toEqual(["ACH_TWO"]);
+        expect(current().achievements).toEqual([{ id: "ACH_TWO" }]);
     });
 
-    it("replace the whole stat list, and refuse one that drops a bound stat", async () => {
+    it("replace the whole stat list in one write", async () => {
         const { call, writes, current } = setup({
-            achievements: [{ id: "ACH_P", name: {}, description: {}, hidden: false, progress: { statId: "Count", max: 5 } }],
             stats: [{ id: "Count", type: "int", defaultValue: 0 }, { id: "Spare", type: "float", defaultValue: 1.5 }],
         });
-        const dropped = refusal(await call(STEAM_AGENT_TOOLS.setStats, { stats: [{ id: "Spare", type: "float" }] }));
-        expect(dropped?.message).toContain("ACH_P needs Count");
-        expect(writes).toHaveLength(0);
-
-        await call(STEAM_AGENT_TOOLS.setStats, {
-            stats: [{ id: "Count", type: "int", max: 5, incrementOnly: true }],
-        });
+        await call(STEAM_AGENT_TOOLS.setStats, { stats: [{ id: "Count", type: "int", max: 5, incrementOnly: true }] });
         expect(writes).toHaveLength(1);
         expect(current().stats).toEqual([{ id: "Count", type: "int", defaultValue: 0, max: 5, incrementOnly: true }]);
+        await call(STEAM_AGENT_TOOLS.setStats, { stats: [] });
+        expect(current().stats).toEqual([]);
     });
 
-    it("refuse a stat list with a duplicate or a bad API Name", async () => {
-        const { call, writes } = setup();
-        expect(refusal(await call(STEAM_AGENT_TOOLS.setStats, { stats: [{ id: "A" }, { id: "A" }] }))?.message).toContain("listed twice");
-        expect(refusal(await call(STEAM_AGENT_TOOLS.setStats, { stats: [{ id: "has space" }] }))?.message).toContain("not a Steam API Name");
+    it("refuse a stat list with a duplicate, a bad API Name, or a range the wrong way round", async () => {
+        const cases: [string, Record<string, unknown>, string][] = [
+            ["a duplicate", { stats: [{ id: "A" }, { id: "A" }] }, "listed twice"],
+            ["a bad name", { stats: [{ id: "has space" }] }, "not a Steam API Name"],
+            ["min above max", { stats: [{ id: "A", min: 10, max: 1 }] }, "is above max"],
+            ["not an array", { stats: "A" }, "must be an array"],
+        ];
+        for (const [label, args, expected] of cases) {
+            const { call, writes } = setup();
+            expect(refusal(await call(STEAM_AGENT_TOOLS.setStats, args))?.message, label).toContain(expected);
+            expect(writes, label).toHaveLength(0);
+        }
+    });
+
+    it("set and clear the App ID, and refuse one that is not a number", async () => {
+        const { call, current, writes } = setup();
+        expect(refusal(await call(STEAM_AGENT_TOOLS.setAppId, { appId: "demo" }))?.message).toContain("not a number");
         expect(writes).toHaveLength(0);
-    });
-
-    it("set the App ID and the languages, and refuse an App ID that is not a number", async () => {
-        const { call, current } = setup();
-        expect(refusal(await call(STEAM_AGENT_TOOLS.setSettings, { appId: "demo" }))?.message).toContain("not a number");
-        await call(STEAM_AGENT_TOOLS.setSettings, { appId: "480", locales: ["en", "zh-CN", "en"] });
-        expect(current()).toMatchObject({ appId: "480", locales: ["en", "zh-CN"] });
-        await call(STEAM_AGENT_TOOLS.setSettings, { appId: "" });
+        await call(STEAM_AGENT_TOOLS.setAppId, { appId: "480" });
+        expect(current().appId).toBe("480");
+        expect(text(await call(STEAM_AGENT_TOOLS.setAppId, { appId: "" }))).toContain("Cleared");
         expect(current().appId).toBeUndefined();
-        expect(refusal(await call(STEAM_AGENT_TOOLS.setSettings, {}))?.message).toContain("Nothing to change");
     });
 
-    it("land a bare string in the catalog's first language", async () => {
-        const { call, current } = setup({ locales: ["zh-CN", "en"] });
-        await call(STEAM_AGENT_TOOLS.addAchievements, { achievements: [{ id: "ACH_S", name: "标题" }] });
-        expect(current().achievements[0]!.name).toEqual({ "zh-CN": "标题" });
-    });
-
-    it("refuse every write on a frozen project, rather than dropping it the way the tab does", async () => {
-        const { call, writes } = setup({}, { frozen: true });
+    it("refuse every write on a frozen project, rather than dropping it the way the panel does", async () => {
+        const { call, writes } = setup({ achievements: [{ id: "ACH_ONE" }] }, { frozen: true });
         for (const [name, args] of [
-            [STEAM_AGENT_TOOLS.setSettings, { appId: "480" }],
-            [STEAM_AGENT_TOOLS.addAchievements, { achievements: [{ id: "ACH_NEW" }] }],
+            [STEAM_AGENT_TOOLS.setAppId, { appId: "480" }],
+            [STEAM_AGENT_TOOLS.addAchievements, { ids: ["ACH_NEW"] }],
+            [STEAM_AGENT_TOOLS.renameAchievements, { renames: [{ id: "ACH_ONE", newId: "ACH_TWO" }] }],
+            [STEAM_AGENT_TOOLS.removeAchievements, { ids: ["ACH_ONE"] }],
             [STEAM_AGENT_TOOLS.setStats, { stats: [] }],
         ] as [string, Record<string, unknown>][]) {
             expect(refusal(await call(name, args))?.code, name).toBe("unavailable");
@@ -305,23 +259,23 @@ describe("the Steam plugin's agent tools", () => {
     });
 
     it("report the catalog's own problems through list, rather than silently", async () => {
-        const { call } = setup({ achievements: [{ id: "ACH_ONE", name: {}, description: {}, hidden: false }] });
-        const result = await call(STEAM_AGENT_TOOLS.list, {});
-        const data = (result as unknown as { data: { problems: { severity: string; message: string }[] } }).data;
-        expect(data.problems.map(problem => problem.message)).toContain("No Steam App ID set");
-        expect(data.problems.some(problem => problem.severity === "warning" && problem.message.includes("Missing name"))).toBe(true);
+        const { call } = setup({ achievements: [{ id: "ACH_ONE" }] });
+        const problems = data(await call(STEAM_AGENT_TOOLS.list, {})).problems as { severity: string; message: string }[];
+        expect(problems.some(problem => problem.severity === "warning")).toBe(true);
     });
 
-    it("filter list by query, over API Names and authored text alike", async () => {
-        const { call } = setup({
-            achievements: [
-                { id: "ACH_ROOFTOP", name: { en: "On the roof" }, description: {}, hidden: false },
-                { id: "ACH_BEACH", name: { en: "Sand everywhere" }, description: {}, hidden: false },
-            ],
-        });
-        const byName = (result: unknown) => ((result as { data: { achievements: { id: string }[] } }).data.achievements).map(item => item.id);
-        expect(byName(await call(STEAM_AGENT_TOOLS.list, { query: "beach" }))).toEqual(["ACH_BEACH"]);
-        expect(byName(await call(STEAM_AGENT_TOOLS.list, { query: "roof" }))).toEqual(["ACH_ROOFTOP"]);
-        expect(byName(await call(STEAM_AGENT_TOOLS.list, {}))).toHaveLength(2);
+    it("name the fields a 0.1 entry still carries, without printing them", async () => {
+        const { call } = setup({ achievements: [{ id: "ACH_OLD", name: { en: "Old" }, hidden: true }, { id: "ACH_NEW" }] });
+        const achievements = data(await call(STEAM_AGENT_TOOLS.list, {})).achievements as Record<string, unknown>[];
+        expect(achievements[0]!.carriedFields).toEqual(["name", "hidden"]);
+        expect(achievements[0]).not.toHaveProperty("name");
+        expect(achievements[1]).toEqual({ id: "ACH_NEW" });
+    });
+
+    it("filter list by API Name", async () => {
+        const { call } = setup({ achievements: [{ id: "ACH_ROOFTOP" }, { id: "ACH_BEACH" }] });
+        const ids = (result: unknown) => (data(result).achievements as { id: string }[]).map(item => item.id);
+        expect(ids(await call(STEAM_AGENT_TOOLS.list, { query: "beach" }))).toEqual(["ACH_BEACH"]);
+        expect(ids(await call(STEAM_AGENT_TOOLS.list, {}))).toHaveLength(2);
     });
 });

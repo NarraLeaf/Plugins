@@ -7,12 +7,12 @@
 import { describe, expect, it } from "vitest";
 import {
     CATALOG_VERSION,
+    carriedProgressMax,
     clampStatValue,
     emptyCatalog,
     findAchievement,
     findStat,
     issuesBySubject,
-    localizedText,
     normalizeCatalog,
     validateCatalog,
     type AchievementCatalog,
@@ -39,19 +39,23 @@ describe("normalizeCatalog", () => {
         expect(result.stats.map(item => item.id)).toEqual(["KEPT_STAT"]);
     });
 
-    it("always leaves at least one locale, and never a duplicate", () => {
-        expect(normalizeCatalog({ locales: [] }).locales).toEqual(["en"]);
-        expect(normalizeCatalog({ locales: ["zh-CN", "zh-CN", " en ", ""] }).locales).toEqual(["zh-CN", "en"]);
+    it("carries the fields a 0.1 catalog stored on an achievement through untouched", () => {
+        // Names, descriptions, icons and the hidden flag are no longer asked for,
+        // but they are the author's own words; the next write must not drop them.
+        const stored = {
+            id: " A ",
+            name: { en: "One", ja: "いち" },
+            description: { en: "First" },
+            hidden: true,
+            iconAchievedAssetId: "asset-1",
+            progress: { statId: "S", max: 10 },
+        };
+        const [achievement] = normalizeCatalog({ locales: ["en"], achievements: [stored] }).achievements;
+        expect(achievement).toEqual({ ...stored, id: "A" });
     });
 
-    it("keeps localized text for locales the catalog does not declare", () => {
-        // Dropping them would silently destroy translations the moment an author
-        // removed a language from the switcher.
-        const result = normalizeCatalog({
-            locales: ["en"],
-            achievements: [{ id: "A", name: { en: "One", ja: "いち" } }],
-        });
-        expect(result.achievements[0].name).toEqual({ en: "One", ja: "いち" });
+    it("no longer writes a language list of its own", () => {
+        expect(normalizeCatalog({ locales: ["en", "zh-CN"] })).not.toHaveProperty("locales");
     });
 
     it("reads a stat authored while avgrate existed as float, not int", () => {
@@ -71,17 +75,6 @@ describe("normalizeCatalog", () => {
         expect(stat.max).toBe(10);
     });
 
-    it("keeps a progress binding only when it names a stat", () => {
-        const result = normalizeCatalog({
-            achievements: [
-                { id: "A", progress: { statId: "S", max: 10 } },
-                { id: "B", progress: { max: 10 } },
-                { id: "C", progress: "yes" },
-            ],
-        });
-        expect(result.achievements.map(item => item.progress)).toEqual([{ statId: "S", max: 10 }, undefined, undefined]);
-    });
-
     it("stamps the current version even on data that claimed another", () => {
         expect(normalizeCatalog({ version: 99 }).version).toBe(CATALOG_VERSION);
     });
@@ -99,7 +92,7 @@ describe("validateCatalog", () => {
 
     it("rejects API names Steam would not accept", () => {
         const messages = errors(catalog({
-            achievements: [{ id: "has space", name: {}, description: {}, hidden: false }],
+            achievements: [{ id: "has space" }],
             stats: [{ id: "né", type: "int", defaultValue: 0 }],
         }));
         expect(messages).toEqual([
@@ -110,19 +103,16 @@ describe("validateCatalog", () => {
 
     it("rejects an API name longer than Steam's 44 characters", () => {
         expect(errors(catalog({
-            achievements: [{ id: "A".repeat(45), name: {}, description: {}, hidden: false }],
+            achievements: [{ id: "A".repeat(45) }],
         }))).toHaveLength(1);
         expect(errors(catalog({
-            achievements: [{ id: "A".repeat(44), name: {}, description: {}, hidden: false }],
+            achievements: [{ id: "A".repeat(44) }],
         }))).toHaveLength(0);
     });
 
     it("catches duplicates on both sides", () => {
         const messages = errors(catalog({
-            achievements: [
-                { id: "SAME", name: {}, description: {}, hidden: false },
-                { id: "SAME", name: {}, description: {}, hidden: false },
-            ],
+            achievements: [{ id: "SAME" }, { id: "SAME" }],
             stats: [
                 { id: "S", type: "int", defaultValue: 0 },
                 { id: "S", type: "int", defaultValue: 0 },
@@ -134,41 +124,25 @@ describe("validateCatalog", () => {
         ]);
     });
 
-    it("catches progress pointing at a stat that is not there, and a zero max", () => {
-        expect(errors(catalog({
-            achievements: [{ id: "A", name: {}, description: {}, hidden: false, progress: { statId: "GONE", max: 10 } }],
-        }))).toEqual([expect.stringContaining("unknown stat")]);
-
-        expect(errors(catalog({
-            stats: [{ id: "S", type: "int", defaultValue: 0 }],
-            achievements: [{ id: "A", name: {}, description: {}, hidden: false, progress: { statId: "S", max: 0 } }],
-        }))).toEqual([expect.stringContaining("above zero")]);
-    });
-
     it("catches a stat whose min is above its max", () => {
         expect(errors(catalog({
             stats: [{ id: "S", type: "int", defaultValue: 0, min: 10, max: 1 }],
         }))).toEqual([expect.stringContaining("min above max")]);
     });
 
-    it("warns per missing language, and only for declared ones", () => {
-        const issues = validateCatalog(catalog({
-            locales: ["en", "zh-CN"],
+    it("says nothing about the text a 0.1 catalog carries", () => {
+        // That text is set in Steamworks now; a missing translation of it is not
+        // something this catalog can be wrong about.
+        expect(validateCatalog(catalog({
             appId: "480",
-            achievements: [{ id: "A", name: { en: "One" }, description: {}, hidden: false }],
-        }));
-        expect(issues.map(issue => issue.message)).toEqual([
-            "Missing description for en",
-            "Missing name for zh-CN",
-            "Missing description for zh-CN",
-        ]);
-        expect(issues.every(issue => issue.severity === "warning")).toBe(true);
+            achievements: [{ id: "A", name: { en: "One" }, progress: { statId: "GONE", max: 0 } }],
+        }))).toEqual([]);
     });
 
     it("warns about a missing App ID only once there is something to unlock", () => {
         expect(validateCatalog(catalog())).toEqual([]);
         expect(validateCatalog(catalog({
-            achievements: [{ id: "A", name: { en: "x" }, description: { en: "y" }, hidden: false }],
+            achievements: [{ id: "A" }],
         }))).toEqual([{ severity: "warning", message: "No Steam App ID set" }]);
     });
 });
@@ -219,30 +193,23 @@ describe("clampStatValue", () => {
     });
 });
 
-describe("localizedText", () => {
-    const locales = ["en", "zh-CN"];
-
-    it("prefers the asked-for locale", () => {
-        expect(localizedText({ en: "One", "zh-CN": "一" }, "zh-CN", locales)).toBe("一");
+describe("carriedProgressMax", () => {
+    it("reads the maximum a 0.1 catalog stored on the achievement", () => {
+        expect(carriedProgressMax({ id: "A", progress: { statId: "S", max: 10 } })).toBe(10);
     });
 
-    it("falls back to the first locale that has any text", () => {
-        expect(localizedText({ "zh-CN": "一" }, "en", locales)).toBe("一");
-    });
-
-    it("treats whitespace as absent, in both the exact hit and the fallback", () => {
-        expect(localizedText({ en: "   ", "zh-CN": "一" }, "en", locales)).toBe("一");
-        expect(localizedText({ en: "   " }, "en", locales)).toBe("");
-    });
-
-    it("returns empty rather than undefined when nothing is authored", () => {
-        expect(localizedText({}, "en", locales)).toBe("");
+    it("answers null for anything that would not have drawn a toast", () => {
+        expect(carriedProgressMax(null)).toBeNull();
+        expect(carriedProgressMax({ id: "A" })).toBeNull();
+        expect(carriedProgressMax({ id: "A", progress: { max: 0 } })).toBeNull();
+        expect(carriedProgressMax({ id: "A", progress: { max: "10" } })).toBeNull();
+        expect(carriedProgressMax({ id: "A", progress: "yes" })).toBeNull();
     });
 });
 
 describe("findAchievement / findStat", () => {
     const source = catalog({
-        achievements: [{ id: "A", name: {}, description: {}, hidden: false }],
+        achievements: [{ id: "A" }],
         stats: [{ id: "S", type: "int", defaultValue: 0 }],
     });
 

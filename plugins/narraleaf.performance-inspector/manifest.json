@@ -4,6 +4,16 @@
     "name": "Performance Inspector",
     "version": "0.2.0",
     "description": "A profiler that runs inside the game. Blueprint nodes start it and open its overlay - bind a key with an On Key Down head if you want one - and it reports frame rate and hitches, JavaScript heap, long tasks, every asset the run has fetched with its bytes and decode time, and what the engine's own image cache is holding against its budgets. Reports copy out as JSON or as a written summary.",
+    "localized": {
+        "zh": {
+            "name": "性能检查器",
+            "description": "在游戏内运行的性能分析器，由蓝图节点启动并打开浮层，不占用任何按键；如需快捷键，可用「按键按下时」事件头节点自行绑定。可查看帧率与卡顿、JavaScript 堆、长任务、本次运行取回的每个资产及其字节数与解码耗时，以及引擎图像缓存相对预算的占用；报告可复制为 JSON 或文字摘要"
+        },
+        "ja": {
+            "name": "パフォーマンス インスペクター",
+            "description": "ゲーム内で動作するプロファイラ。ブループリントノードで計測を開始してオーバーレイを開き、プラグイン自身はキーを占有しない（ショートカットは「キーを押したとき」の先頭ノードで割り当てる）。フレームレートとヒッチ、JavaScript ヒープ、ロングタスク、取得した各アセットのバイト数とデコード時間、エンジンの画像キャッシュが予算に対して保持している量を表示し、レポートは JSON または文章の要約としてコピーできる"
+        }
+    },
     "publisher": "NarraLeaf Studio",
     "icon": "icon.png",
     "entries": {

@@ -1,92 +1,99 @@
 # Steam achievements: declaring them, and making the game award them
 
-This plugin has two halves, and the mistake worth naming first is treating one as the other:
+Three places, and the mistake worth naming first is treating any one as another:
 
-- **The catalog** is the declaration — which achievements and stats exist, what players read, which
-  icons they get. That is what these tools write.
-- **The blueprint nodes** are what awards one while the game runs. No tool here unlocks anything.
+- **The catalog** — the API Names this project declares. That, and the App ID and the stat list, is
+  all these tools write.
+- **The story row or the blueprint graph** — what awards an achievement while the game runs. No
+  tool here unlocks anything.
+- **The Steamworks partner site** — where everything a player reads lives: the achievement's name,
+  its description, its icons, whether it is hidden until unlocked. Steam draws them from there.
 
-There is a third place, outside Studio entirely: **the Steamworks partner site**. Steam only knows
-an achievement that exists in the backend under the same API Name. The catalog does not upload
-itself, and nothing in Studio can — so a catalog entry with no backend twin is a call Steam refuses
-at runtime. Say so when you add achievements; the author has to enter them at
-`partner.steamgames.com` under the same names.
+The catalog holds **names only**. Version 0.1 of this plugin asked for the text and icons here as
+well, per language, and none of it ever reached Steam or the game, so it is no longer offered. There
+is nothing in Studio that can write them and nothing here that can upload the catalog — an
+achievement with no backend twin under the same API Name is a call Steam refuses at runtime. So when
+you declare achievements, tell the author to enter the same names at `partner.steamgames.com` with
+the words and art players see. (An entry authored under 0.1 keeps its old fields; they travel
+through every edit untouched, and `list` names them under `carriedFields` rather than printing them.)
 
 ## The local mirror, and why the game works without Steam
 
-Every read node answers from a mirror in the player's save data, not from Steam. Unlocking writes
-the mirror first and then echoes to Steam if it is there. So the same script runs unchanged on
-Steam, on itch, in the web export and in Dev Mode — Steam absent simply means nothing is echoed.
+Every read answers from a mirror in the player's save data, not from Steam. Unlocking writes the
+mirror first and then echoes to Steam if it is there. So the same script runs unchanged on Steam, on
+itch, in the web export and in Dev Mode — Steam absent simply means nothing is echoed.
 
-That is worth knowing because it means you can wire up achievements and play-test them with no
-Steam at all. `Is Achievement Unlocked` will answer correctly. What you cannot verify without Steam
-is whether the backend accepted the name.
+That means you can wire up achievements and play-test them with no Steam at all. What you cannot
+verify without Steam is whether the backend accepted the name.
 
 ## Tools
 
-Every write is one undo step for the author. Icons resolve by image-asset id or exact name — import
-them with `assets_import` first.
+Every write is one undo step for the author, and anything that does not resolve refuses the whole
+call and writes nothing.
 
-- `narraleaf_steam_achievements__list {query?}` — the catalog, the App ID, the authored languages
-  and Studio's own author-time problems. Call it first; the others take API Names.
-- `narraleaf_steam_achievements__set_settings {appId?, locales?}`
-- `narraleaf_steam_achievements__add_achievements {achievements: [...]}`
-- `narraleaf_steam_achievements__update_achievements {achievements: [{id, ...}]}` — pass only what
-  changes; text folds in per language, `progress: null` unbinds, `newId` renames.
+- `narraleaf_steam_achievements__list {query?}` — the catalog, the App ID, and Studio's own
+  author-time problems. Call it first; the others take API Names.
+- `narraleaf_steam_achievements__set_app_id {appId}` — `""` clears it.
+- `narraleaf_steam_achievements__add_achievements {ids}`
+- `narraleaf_steam_achievements__rename_achievements {renames: [{id, newId}]}`
 - `narraleaf_steam_achievements__remove_achievements {ids}`
-- `narraleaf_steam_achievements__set_stats {stats: [...]}` — the **whole** list; what you leave out
-  is gone.
+- `narraleaf_steam_achievements__set_stats {stats}` — the **whole** list; what you leave out is gone.
 
 An API Name is `A-Z a-z 0-9 _`, up to 44 characters, conventionally `ACH_SOMETHING` for an
-achievement and a bare noun for a stat. Anything else is refused here rather than silently
-truncated by Steam months later.
+achievement and a bare noun for a stat. Anything else is refused here rather than silently truncated
+by Steam months later. Names are case-sensitive to Steam.
 
 ```json
-{"achievements": [
-  {"id": "ACH_FIRST_CONFESSION",
-   "name": {"en": "First words", "zh-CN": "第一次告白"},
-   "description": {"en": "You said it out loud.", "zh-CN": "你终于说出口了"},
-   "iconAchieved": "ach_confession.png"},
-  {"id": "ACH_ALL_ENDINGS", "name": "Completionist", "hidden": true,
-   "progress": {"stat": "EndingsSeen", "max": 4}}
+{"ids": ["ACH_FIRST_CONFESSION", "ACH_ALL_ENDINGS", "ACH_SECRET_ROUTE"]}
+```
+
+```json
+{"stats": [
+  {"id": "EndingsSeen", "type": "int", "max": 4, "incrementOnly": true},
+  {"id": "HoursPlayed", "type": "float"}
 ]}
 ```
 
-A bare string lands in the catalog's first language; the object form names locales outright. Declare
-the stat (`set_stats`) before an achievement binds progress to it — a binding to a stat that does
-not exist is refused.
+`incrementOnly`, `min` and `max` are enforced on every write the game makes. Set the same flags in
+the backend, which has its own copy of them.
 
 ## Awarding one in the game
 
-In an event graph, after whatever earns it:
+Two ways, and they write the same mirror, so a row and a node naming the same achievement agree:
 
-- **Unlock Achievement** (`narraleaf.steam-achievements.unlock`) — its `Achievement` field is the
-  API Name. This is the only thing that awards an achievement.
-- **Indicate Achievement Progress** — shows Steam's "3 of 10" toast. It needs an achievement whose
-  `progress` is bound to a stat; it does *not* unlock anything, so the graph still calls
-  **Unlock Achievement** when the count reaches `max`.
-- **Set Stat** / **Add To Stat** / **Get Stat** — the counters. `Add To Stat` is the usual one:
-  `+1` per ending seen, per secret found.
-- **Is Achievement Unlocked** — for "have they already?" branches.
+- **A story row** — `/unlock ACH_NAME` on the line where it happens. This is usually the right one:
+  "the player has seen this ending" belongs on that beat, not in a graph wired to it. Typing the
+  name resolves case-insensitively against the catalog, so `/unlock ach_win` lands as `ACH_WIN`; a
+  name the catalog does not have is kept as typed and the row's inspector lists it as missing.
+- **The Unlock Achievement blueprint node** (`narraleaf.steam-achievements.unlock`) — for a graph
+  that has already worked something out. Use `blueprint_node {type: "..."}` for its pins and
+  `blueprint_apply` to place it.
 
-Use `blueprint_node {type: "narraleaf.steam-achievements.unlock"}` for the pins, and
-`blueprint_apply` to place it. A progress achievement is normally three nodes in a row: add to the
-stat, indicate progress, then unlock when the stat reaches `max`.
+For the counters: **Set Stat**, **Add To Stat** and **Get Stat**. `Add To Stat` is the usual one —
+`+1` per ending seen, per secret found. **Is Achievement Unlocked** is for "have they already?"
+branches, and **Indicate Achievement Progress** drives Steam's "3 of 10" toast for an achievement
+the *backend* has set up as a progress achievement — it does not unlock anything, so the row or
+graph still unlocks when the count is reached.
+
+`Open Store Page` and `Owns DLC` exist too. `Owns DLC` is for deciding whether to draw a purchase
+button, never for gating content the player already paid for.
 
 ## The two App IDs
 
-`set_settings {appId}` sets the project-wide App ID, and that is the one the Steam connection itself
-is opened with — the author never places a `steam_appid.txt`. It is read once, when the game first
-reaches Steam, so changing it mid-session does nothing until a reload.
+`set_app_id` sets the project-wide one, and that is the one the Steam connection itself is opened
+with — the author never places a `steam_appid.txt`. It is read once, when the game first reaches
+Steam, so a change takes effect on the next run.
 
-Separately, each build variant can state its own App ID in the build config, because **a demo is a
-different Steam app from the game it demos**. That one is used for store-page links, and falls back
-to the catalog's when a variant states nothing. Setting the catalog's App ID is enough for a single
-release; mention the build config only if the author is shipping a demo.
+Separately, a build variant can carry its own App ID, because **a demo is a different Steam app from
+the game it demos**. That one is a build setting the author fills in; no tool here can reach it, and
+the plugin only ever reads it from a compiled build. Mention it only if the author is shipping a
+demo.
 
 ## What is deliberately missing
 
-- **Average-rate stats.** Steam's third stat kind is written with a session length no node here has,
-  so it could only ever reach the mirror and never Steam. Offering a type that silently never syncs
-  is worse than not offering it.
-- **Resetting a player's achievements** exists as a node (`Reset All`) for testing, not for scripts.
+- **Average-rate stats.** Steam writes them with a session length no node here has, so one could
+  only ever reach the mirror and never Steam. Offering a type that silently never syncs is worse
+  than not offering it: pick `int` or `float`.
+- **No backend export.** Achievement schemas are entered on the partner site by hand.
+- **Resetting a player's achievements** exists as a node (`Reset All Stats`) for testing, not for
+  scripts.

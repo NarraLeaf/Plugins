@@ -209,3 +209,13 @@ jobs:
             `${{ needs.prepare.outputs.id }}` folder.
 
             Source: [`plugins/${{ needs.prepare.outputs.id }}`](https://github.com/NarraLeaf/Plugins/tree/${{ github.ref_name }}/plugins/${{ needs.prepare.outputs.id }})
+
+  # The GitCode copy, which Studio's plugin store reads where GitHub is out of reach. Called rather
+  # than left to the `release` event: a release published with this workflow's token raises no event
+  # for other workflows. See mirror-gitcode.yml.
+  mirror:
+    name: Mirror to GitCode
+    needs: release
+    uses: ./.github/workflows/mirror-gitcode.yml
+    secrets:
+      GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
