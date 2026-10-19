@@ -39,6 +39,32 @@ than the plugin's address permission). It never throws: a store link is not wort
 taking a running game down for. Leave its App ID blank for this build's own page,
 or fill in a DLC's to send the player there instead.
 
+**Six tools for AI agents** connected to Studio's MCP endpoint, so an agent
+building a game can declare achievements and stats without the author opening the
+tab. They are the same catalog behind a batch-shaped API, and each call is one
+step of undo:
+
+| Tool | |
+|---|---|
+| `narraleaf_steam_achievements__list` | the catalog, the App ID, the authored languages, and the editor's own validation (read) |
+| `…__set_settings` | the App ID and the languages text is authored in |
+| `…__add_achievements` | new achievements, icons resolved by asset id or exact name |
+| `…__update_achievements` | retext, rename, hide, re-icon, bind or unbind progress |
+| `…__remove_achievements` | |
+| `…__set_stats` | the whole stat list |
+
+Nothing there unlocks anything — the catalog is the declaration and the blueprint
+nodes are what award one at runtime, which every answer says in a line, because
+an agent that has just written an achievement is one step from assuming the game
+now awards it. `agent/guide.md` ships with the package and is served as
+`agent_guide {chapter:"plugin:narraleaf.steam-achievements"}`; it carries the
+unlock recipe, the progress-achievement recipe and the warning that Steam only
+knows an achievement the Steamworks backend also has under the same API Name.
+
+This is what raises the plugin's floor to Studio **1.5.0**: `services.agent` is
+newer than the manifest key that declares the tools, and a Studio that predates
+either refuses the package at install rather than loading it without them.
+
 ## Owns DLC is for offering a purchase, never for gating content
 
 `Owns DLC` answers whether this account owns the DLC with that Steam App ID. Use
@@ -179,6 +205,12 @@ with the file and both hashes named.
   `int` or `float`. (A catalog authored while it existed keeps its values; those
   stats load as `float`.) Restoring it means first deciding what a session is in
   a visual novel, and giving the nodes a way to say so.
+- **The agent tools cannot set a build variant's App ID.** They set the catalog's
+  project-wide one, which is what the Steam connection is opened with. The
+  per-variant field exists for a demo, which is a different Steam app, and the
+  plugin surface only ever *reads* `contributes.buildConfig` — and only in the
+  runtime entry, from a compiled build. So an author shipping a demo fills that
+  field themselves, in Build settings.
 - **No Steamworks backend export yet.** Achievement schemas are entered on the
   partner site; the export (VDF + 64x64 icons) needs a spike against the current
   partner documentation and is deliberately not guessed at here. The 64x64 PNG

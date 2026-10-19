@@ -1,6 +1,6 @@
 {
   "name": "@narraleaf-plugins/steam-achievements",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Author Steam achievements and stats in Studio, and unlock them from blueprint graphs, with a local mirror wherever Steam is not available.",
   "license": "MPL-2.0",
@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
-    "narraleaf-studio": "^1.0.0",
+    "narraleaf-studio": "^1.6.3",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   },
@@ -34,7 +34,7 @@
       "integration",
       "blueprint"
     ],
-    "studioVersion": ">=0.2.0",
+    "studioVersion": ">=1.5.0",
     "locales": {
       "zh-CN": {
         "name": "Steam 成就",

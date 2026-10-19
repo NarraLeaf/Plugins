@@ -49,6 +49,7 @@ import {
     STAT_OPTIONS_SOURCE,
     createSteamAchievementNodes,
 } from "./nodes";
+import { createSteamAgentTools } from "./agentTools";
 
 const RAIL_ID = `${PLUGIN_ID}.rail`;
 const TAB_ID = `${PLUGIN_ID}.editor`;
@@ -97,6 +98,12 @@ function createCatalogStore(app: PluginApp) {
             notify();
         },
         get: () => catalog,
+        /**
+         * Replace the catalog wholesale in one write. The agent tools build the next catalog
+         * themselves and commit it here, which is what makes one of their calls one step of undo;
+         * the tab's own edits go through the narrower methods below.
+         */
+        replace: (next: AchievementCatalog) => commit(next),
         subscribe(listener: () => void) {
             listeners.add(listener);
             return () => {
@@ -732,6 +739,16 @@ export default definePlugin({
         // actually on disk.
         const unregisterReloader = app.services.workspace.registerReloader(() => store.load());
 
+        // The same catalog for AI agents connected to Studio, behind six batch tools. Guarded
+        // because the service is newer than this plugin's lowest supported Studio: a host without
+        // it keeps everything else, and only agents go without.
+        let unregisterAgentTools: (() => void) | undefined;
+        try {
+            unregisterAgentTools = app.services.agent.registerTools(createSteamAgentTools(app, store));
+        } catch (error) {
+            console.warn(`[plugin:${PLUGIN_ID}] agent tools were not offered:`, error);
+        }
+
         const openTab = () => {
             app.services.ui.editors.open({
                 id: TAB_ID,
@@ -753,6 +770,7 @@ export default definePlugin({
         return () => {
             unregisterRail();
             unregisterReloader();
+            unregisterAgentTools?.();
             unregisterAchievementOptions();
             unregisterStatOptions();
         };

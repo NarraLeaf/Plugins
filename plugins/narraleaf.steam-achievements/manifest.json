@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "narraleaf.steam-achievements",
   "name": "Steam Achievements",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Author Steam achievements and stats in Studio, and unlock them from blueprint graphs. Falls back to a local mirror wherever Steam is not available, so the same script works on itch, on the web export and in Dev Mode.",
   "publisher": "NarraLeaf Studio",
   "icon": "icon.png",
@@ -27,6 +27,15 @@
     "runtimeData": [
       "narraleaf.steam-achievements.catalog"
     ],
+    "agentTools": [
+      { "name": "narraleaf.steam-achievements.list", "write": false },
+      { "name": "narraleaf.steam-achievements.set_settings", "write": true },
+      { "name": "narraleaf.steam-achievements.add_achievements", "write": true },
+      { "name": "narraleaf.steam-achievements.update_achievements", "write": true },
+      { "name": "narraleaf.steam-achievements.remove_achievements", "write": true },
+      { "name": "narraleaf.steam-achievements.set_stats", "write": true }
+    ],
+    "agentGuide": "agent/guide.md",
     "runtimeCapabilities": [
       "store"
     ],
