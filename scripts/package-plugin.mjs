@@ -98,6 +98,16 @@ if (typeof manifest.icon === "string" && manifest.icon.trim()) {
         missing.push(`${icon} (declared as icon — copy it into dist/ from your build script)`);
     }
 }
+// Same for the agent guide. Studio reads it out of the installed directory, so a
+// package that declares one and does not carry it installs fine and then answers
+// `agent_guide` with nothing — a failure the author would only hear about from
+// whoever connected an agent.
+if (typeof manifest.contributes?.agentGuide === "string" && manifest.contributes.agentGuide.trim()) {
+    const guide = manifest.contributes.agentGuide.trim();
+    if (!fs.existsSync(path.join(distDir, ...guide.split(/[\\/]+/)))) {
+        missing.push(`${guide} (declared as contributes.agentGuide — copy it into dist/ from your build script)`);
+    }
+}
 if (missing.length) {
     console.error(`plugins/${pluginId}/dist is missing declared file(s):`);
     for (const item of missing) {

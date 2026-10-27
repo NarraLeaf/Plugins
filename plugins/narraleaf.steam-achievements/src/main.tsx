@@ -49,6 +49,7 @@ import {
     createSteamAchievementNodes,
 } from "./nodes";
 import { createUnlockStoryAction } from "./story";
+import { createSteamAgentTools } from "./agentTools";
 import { MESSAGES, type Translate } from "./i18n";
 
 const PANEL_ID = `${PLUGIN_ID}.panel`;
@@ -97,6 +98,12 @@ function createCatalogStore(app: PluginApp) {
             notify();
         },
         get: () => catalog,
+        /**
+         * Replace the catalog wholesale in one write. The agent tools build the next catalog
+         * themselves and commit it here, which is what makes one of their calls one step of undo;
+         * the panel's own edits go through the narrower methods below.
+         */
+        replace: (next: AchievementCatalog) => commit(next),
         subscribe(listener: () => void) {
             listeners.add(listener);
             return () => {
@@ -610,6 +617,15 @@ export default definePlugin({
         // actually on disk.
         const unregisterReloader = app.services.workspace.registerReloader(() => store.load());
 
+        // The same catalog for AI agents connected to Studio, behind six batch tools. Guarded so a
+        // host without `services.agent` keeps everything else and only agents go without.
+        let unregisterAgentTools: (() => void) | undefined;
+        try {
+            unregisterAgentTools = app.services.agent.registerTools(createSteamAgentTools(app, store));
+        } catch (error) {
+            console.warn(`[plugin:${PLUGIN_ID}] agent tools were not offered:`, error);
+        }
+
         const unregisterPanel = app.services.ui.panels.register({
             id: PANEL_ID,
             // A getter, read at render: `t()` resolves against the live editor
@@ -629,6 +645,7 @@ export default definePlugin({
             await unregisterPanel();
             await unregisterStoryAction();
             unregisterReloader();
+            unregisterAgentTools?.();
             unregisterAchievementOptions();
             unregisterStatOptions();
         };
