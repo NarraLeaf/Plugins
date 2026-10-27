@@ -42,6 +42,50 @@
       "studioVersion": ">=1.0.0"
     },
     {
+      "id": "mewbaka.ren2leaf-bridge",
+      "name": "Ren2Leaf Bridge",
+      "version": "0.1.0",
+      "description": "Bring a Ren2Leaf pack into the project, so an agent porting a Ren'Py game queries it, records its progress and asks the author through Studio.",
+      "publisher": "MewBaka",
+      "path": "plugins/mewbaka.ren2leaf-bridge",
+      "targets": [
+        "studio"
+      ],
+      "categories": [
+        "workflow",
+        "integration"
+      ],
+      "keywords": [
+        "narraleaf",
+        "narraleaf-studio-plugin",
+        "ren2leaf",
+        "renpy",
+        "migration",
+        "agent",
+        "mcp"
+      ],
+      "license": "MPL-2.0",
+      "contributes": {
+        "blueprintNodes": [],
+        "widgets": [],
+        "locales": []
+      },
+      "permissions": [],
+      "release": {
+        "tag": "mewbaka.ren2leaf-bridge@0.1.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/mewbaka.ren2leaf-bridge%400.1.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/mewbaka.ren2leaf-bridge%400.1.0/mewbaka.ren2leaf-bridge-0.1.0.zip"
+      },
+      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/mewbaka.ren2leaf-bridge%400.1.0/plugins/mewbaka.ren2leaf-bridge/icon.png",
+      "studioVersion": ">=1.8.0",
+      "locales": {
+        "zh-CN": {
+          "name": "Ren2Leaf Bridge",
+          "description": "把 Ren2Leaf 补充包带进项目，让移植 Ren'Py 游戏的 Agent 在 Studio 里查询补充包、记录进度、向作者提问"
+        }
+      }
+    },
+    {
       "id": "narraleaf.auto-highlight",
       "name": "Auto-Highlight",
       "version": "0.1.0",

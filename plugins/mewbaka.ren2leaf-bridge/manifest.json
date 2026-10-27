@@ -1,0 +1,38 @@
+{
+  "manifestVersion": 2,
+  "id": "mewbaka.ren2leaf-bridge",
+  "name": "Ren2Leaf Bridge",
+  "version": "0.1.0",
+  "publisher": "MewBaka",
+  "icon": "icon.png",
+  "description": "Bring a Ren2Leaf pack into the project, so an agent porting a Ren'Py game queries it, records its progress and asks the author through Studio.",
+  "localized": {
+    "zh": {
+      "description": "把 Ren2Leaf 补充包带进项目，让移植 Ren'Py 游戏的 Agent 在 Studio 里查询补充包、记录进度、向作者提问"
+    }
+  },
+  "entries": {
+    "studio": "main.js"
+  },
+  "contributes": {
+    "agentTools": [
+      { "name": "mewbaka.ren2leaf-bridge.port_status", "write": false },
+      { "name": "mewbaka.ren2leaf-bridge.pack_section", "write": false },
+      { "name": "mewbaka.ren2leaf-bridge.pack_query", "write": false },
+      { "name": "mewbaka.ren2leaf-bridge.pack_screen", "write": false },
+      { "name": "mewbaka.ren2leaf-bridge.pack_image", "write": false },
+      { "name": "mewbaka.ren2leaf-bridge.voice_check", "write": false },
+      { "name": "mewbaka.ren2leaf-bridge.ledger_upsert", "write": true },
+      { "name": "mewbaka.ren2leaf-bridge.decision_ask", "write": true },
+      { "name": "mewbaka.ren2leaf-bridge.decision_seen", "write": true },
+      { "name": "mewbaka.ren2leaf-bridge.issue_add", "write": true },
+      { "name": "mewbaka.ren2leaf-bridge.log_note", "write": true },
+      { "name": "mewbaka.ren2leaf-bridge.lines_record", "write": true }
+    ],
+    "agentGuide": "agent/guide.md",
+    "tests": [
+      "mewbaka.ren2leaf-bridge.voice-ledger"
+    ]
+  },
+  "permissions": []
+}

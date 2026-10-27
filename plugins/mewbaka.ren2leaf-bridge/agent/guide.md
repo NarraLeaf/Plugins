@@ -1,0 +1,56 @@
+# Ren2Leaf Bridge
+
+Ren2Leaf Bridge holds a Ren'Py port's state inside the Studio project: the Ren2Leaf pack the
+migrator exported, the feature checklist, the questions for the author, the log, Studio issues
+and where each original line landed. It does not port anything itself. The porting method is
+the `narraleaf-port-renpy` skill; this chapter is how its tools fit into that method.
+
+Tool names below are as your client lists them (`mewbaka_ren2leaf_bridge__<tool>`).
+
+## Start of every session
+
+1. `port_status`. It says whether a pack is imported, the phase, what is done, what the author
+   answered, and the last log entries. A new context resumes from here, not from memory.
+2. No pack: stop. Ask the author to import it (the Ren2Leaf Bridge panel in Studio's left
+   sidebar > Choose pack…) and wait. Do not port without it, and do not ask for the pack folder
+   instead: the pack is read through this plugin only.
+3. Empty checklist: survey the game, then write every feature of the original with
+   `ledger_upsert` before converting anything. The author reads this list.
+
+## Reading the pack
+
+- `pack_section {section}` reads one README section; without it, the list of sections.
+- `pack_query {kind, key?, file?}` reads rows of the full scan: speakers, labels, endings,
+  screens, python, variables, achievements… Ask for what you need instead of reading
+  `inventory.json` whole. Where the README says a cut table continues in `data/inventory.json`
+  or `data/speakers.json`, this is how you read the rest.
+- `pack_screen {screen, image?}` gives a captured screen's element rectangles at 1920x1080,
+  the crops cut from it, and the screenshot with `image: true`. Build interface pages from these
+  rectangles.
+- `pack_image {path}` shows any picture the pack carries: screenshots, crops, and speaker
+  portraits (`characters/<variable>.png`). The README links pictures by these paths. They are
+  scaled down for viewing; real assets come from the game's source.
+- Lines starting `# Known pack error` are mistakes Ren2Leaf is known to make in that section
+  or kind. Check them against the source before relying on the rows.
+- Rows marked 迁移者 are the migrator's decisions and are settled. Rows from 扫描 (scan) and
+  引擎 (engine) are evidence.
+
+## While porting
+
+- After every `story_apply` of a scene with dialogue: `lines_record {scene, entries}` with each
+  say line's source file:line, the Studio line's unit id and its voice file, then
+  `voice_check {scene}`. Rewriting a scene gives every line a new id and silently detaches its
+  voice; `voice_check` is how you see it. Re-record with `replace: true` after a rewrite.
+- A question only the author can answer: `decision_ask` with options and a recommendation, then
+  keep working on something else. Answers come back at the top of later answers from this
+  plugin; act on them, then `decision_seen`.
+- Never drop a feature yourself. `ledger_upsert` refuses `dropped` without an answered decision.
+- Record each mapping decision with `log_note {topic, decision, reason}` and each phase change
+  with `log_note {phase}`. Record Studio problems with `issue_add`, exactly as they happened.
+- When an item is done, set `status: "done"` and `where`. The author may send it back; the
+  notice says why.
+
+## Checking
+
+- `test {id: "mewbaka.ren2leaf-bridge.voice-ledger"}` runs the voice check as a Studio test
+  and fails on any recorded voiced line without its voice.

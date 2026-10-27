@@ -1,0 +1,43 @@
+{
+  "name": "@narraleaf-plugins/ren2leaf-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bring a Ren2Leaf pack into the project, so an agent porting a Ren'Py game queries it, records its progress and asks the author through Studio.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "keywords": [
+    "narraleaf",
+    "narraleaf-studio-plugin",
+    "ren2leaf",
+    "renpy",
+    "migration",
+    "agent",
+    "mcp"
+  ],
+  "packageManager": "yarn@4.10.3",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.8.1",
+    "@types/react": "^19.3.0",
+    "esbuild": "^0.25.0",
+    "narraleaf-studio": "^1.8.0",
+    "typescript": "^5.9.3"
+  },
+  "narraleaf": {
+    "categories": [
+      "workflow",
+      "integration"
+    ],
+    "studioVersion": ">=1.8.0",
+    "locales": {
+      "zh-CN": {
+        "name": "Ren2Leaf Bridge",
+        "description": "把 Ren2Leaf 补充包带进项目，让移植 Ren'Py 游戏的 Agent 在 Studio 里查询补充包、记录进度、向作者提问"
+      }
+    }
+  }
+}
