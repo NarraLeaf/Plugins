@@ -23,6 +23,7 @@ export const QUERY_KINDS = [
     "audio",
     "asset",
     "review",
+    "voice",
 ] as const;
 export type QueryKind = typeof QUERY_KINDS[number];
 
@@ -91,6 +92,11 @@ export const KIND_SPECS: Record<QueryKind, KindSpec> = {
     audio: { about: "Audio statements with use counts and sites", rows: i => list(at(ext(i, "facts"), "audio")), keys: ["name"] },
     asset: { about: "Asset findings: missing, case mismatch, duplicates, formats, fonts, notes", rows: i => [ext(i, "assets")].filter(isRecord), keys: [], single: true },
     review: { about: "Lines the scanner flagged for a person to review", rows: i => list(i.needsReview), keys: ["kind"] },
+    voice: {
+        about: "Each line's voice file under config.auto_voice: the source line, its Ren'Py translation identifier, the file that identifier names, and whether the game has it",
+        rows: i => list(at(ext(i, "speakers"), "autoVoice", "entries")),
+        keys: ["id"],
+    },
 };
 
 export type QueryArgs = {
