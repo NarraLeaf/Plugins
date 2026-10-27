@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildPack, compactElement, PackError } from "./build";
-import { caveatsForKind, caveatsForSection, compareVersions } from "./caveats";
+import { caveatsForKind, caveatsForSection, compareVersions, type PackFacts } from "./caveats";
 import { queryInventory } from "./query";
 import { parseShotTable, sectionWithChildren, splitReadme } from "./readme";
 
@@ -161,4 +161,58 @@ test("caveats apply by section and kind, and stop at the scanner that fixed them
     assert.equal(caveatsForKind("achievement", "0.3.0").length, 0);
     assert.equal(compareVersions("0.10.0", "0.2.0"), 1);
     assert.equal(compareVersions("0.2", "0.2.0"), 0);
+});
+
+test("a caveat about something the game does not have stays off its answers", () => {
+    // The Question as Ren2Leaf 0.2.0 scanned it: no achievements, no gallery, no auto_voice, no
+    // image statements, two endings that return, nothing excluded.
+    const plain: PackFacts = {
+        inventory: {
+            extensions: {
+                python: {
+                    entries: [{ kind: "config", target: "config.has_voice", snippet: "define config.has_voice = False" }],
+                    variables: [{ name: "book" }],
+                },
+                facts: { achievements: { wrappers: [], declared: [], unlockPoints: [], granted: [] } },
+                assets: { summary: { imageDefinitions: 0 } },
+                flow: { endings: [{ name: "marry" }], labels: [{ name: "start", out: [{ kind: "jump", to: "rightaway" }] }] },
+            },
+        },
+        chapters: { excluded: [] },
+    };
+    const ids = (list: { id: string }[]) => list.map(caveat => caveat.id).sort();
+    assert.deepEqual(ids(["2", "3", "4", "5", "6", "7", "8"].flatMap(section => caveatsForSection(section, "0.2.0", plain))),
+        ["chapter-terms", "defines-as-variables", "screens-one-state"]);
+    assert.deepEqual(caveatsForKind("speaker", "0.2.0", plain), []);
+    assert.deepEqual(caveatsForKind("achievement", "0.2.0", plain), []);
+
+    // Each one comes back when the game has the thing.
+    const python = (plain.inventory!.extensions as { python: { entries: object[] } }).python;
+    python.entries.push(
+        { kind: "config", target: "config.auto_voice", snippet: 'define config.auto_voice = "voice/{id}.ogg"' },
+        { kind: "assign", snippet: "g = Gallery()" },
+    );
+    const flow = (plain.inventory!.extensions as { flow: { labels: { out: object[] }[] } }).flow;
+    flow.labels[0]!.out.push({ kind: "jump", to: "splashscreen" });
+    const ach = (plain.inventory!.extensions as { facts: { achievements: { declared: object[] } } }).facts.achievements;
+    ach.declared.push({ name: "1" });
+    assert.ok(caveatsForKind("speaker", "0.2.0", plain).some(caveat => caveat.id === "auto-voice"));
+    assert.ok(caveatsForKind("gallery", "0.2.0", plain).some(caveat => caveat.id === "gallery-unknown"));
+    assert.ok(caveatsForSection("5", "0.2.0", plain).some(caveat => caveat.id === "excluded-reachable"));
+    assert.ok(caveatsForKind("achievement", "0.2.0", plain).length > 0);
+
+    // A scan that does not say keeps every caveat, and so does a caller with no facts.
+    assert.ok(caveatsForSection("8", "0.2.0", { inventory: {}, chapters: null }).some(caveat => caveat.id === "image-geometry"));
+    assert.ok(caveatsForSection("8", "0.2.0").some(caveat => caveat.id === "image-geometry"));
+});
+
+test("queryInventory reads the voice file of each line under auto_voice", () => {
+    const inventory = { extensions: { speakers: { autoVoice: { entries: [
+        { file: "script.rpy", line: 18, id: "start_915cb944", voice: "voice/start_915cb944.ogg", exists: true },
+        { file: "other.rpy", line: 4, id: "other_0a1b2c3d", voice: "voice/other_0a1b2c3d.ogg", exists: false },
+    ] } } } };
+    assert.equal(queryInventory(inventory, { kind: "voice" }).total, 2);
+    assert.deepEqual(queryInventory(inventory, { kind: "voice", key: "other_0a1b2c3d" }).rows.map(row => row.line), [4]);
+    assert.deepEqual(queryInventory(inventory, { kind: "voice", file: "script.rpy" }).rows.map(row => row.id), ["start_915cb944"]);
+    assert.equal(queryInventory({ extensions: { speakers: {} } }, { kind: "voice" }).total, 0);
 });
