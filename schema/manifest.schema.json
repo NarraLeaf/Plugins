@@ -198,6 +198,15 @@
               }
             }
           }
+        },
+        "agentTools": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/agentToolContribution" },
+          "description": "Tools the studio entry offers the AI agents an author connects to Studio's MCP endpoint. Requires a studio entry, since that is what registers them, and registering a tool this list does not name throws at load. The whole list is what the install prompt counts."
+        },
+        "agentGuide": {
+          "$ref": "#/definitions/agentGuideEntry",
+          "description": "A Markdown chapter inside the package, served to agents as agent_guide {chapter: \"plugin:<plugin id>\"}. Where the recipes go that a tool description has no room for."
         }
       }
     },
@@ -257,6 +266,33 @@
         "intl": { "type": "string" },
         "dir": { "enum": ["ltr", "rtl"] }
       }
+    },
+    "agentToolContribution": {
+      "type": "object",
+      "required": ["name", "write"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9_.-]+$",
+          "description": "`<plugin id>.<tool>`, lower case. Advertised to agents as `<plugin id>__<tool>` with every \".\" and \"-\" turned into \"_\", which may not exceed 64 characters — a dot is what some model APIs silently drop a whole tool for."
+        },
+        "write": {
+          "type": "boolean",
+          "description": "Changes the project. Required, not defaulted: a declaration that left it out would be shown to the author as a reading tool whatever the code does. A write tool is refused unless the author allowed agent writes, and each of its calls is captured into one undo step; a tool that changes the project by any route must say true."
+        }
+      }
+    },
+    "agentGuideEntry": {
+      "allOf": [
+        { "$ref": "#/definitions/relativeEntry" },
+        {
+          "type": "string",
+          "pattern": "\\.[Mm][Dd]$"
+        }
+      ],
+      "description": "Relative path to a Markdown file inside the package."
     },
     "sidecarContribution": {
       "type": "object",

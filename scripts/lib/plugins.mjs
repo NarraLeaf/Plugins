@@ -48,6 +48,8 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
     "network",
     "widgetText",
     "structs",
+    "agentTools",
+    "agentGuide",
 ];
 
 /**
@@ -55,6 +57,20 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
  * `UI_STRUCT_FIELD_TYPES` in src/shared/types/ui-editor/struct.ts.
  */
 export const PLUGIN_STRUCT_FIELD_TYPES = ["string", "number", "boolean", "image", "color", "json"];
+
+/**
+ * A plugin agent tool's own name, and what an MCP client will take as the advertised one.
+ *
+ * Port of Studio's `AGENT_PLUGIN_TOOL_NAME_PATTERN` / `AGENT_MCP_TOOL_NAME_PATTERN` in
+ * `src/shared/agent/pluginTools.ts`. The advertised name is the plugin id and the tool part with
+ * every `.` and `-` turned into `_`, joined by `__` — dots are what some model APIs silently drop a
+ * whole tool for, which is the only reason the mapping exists.
+ */
+const AGENT_PLUGIN_TOOL_NAME_PATTERN = /^[a-z0-9_.-]+$/;
+const AGENT_MCP_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+const AGENT_PLUGIN_TOOL_SEPARATOR = "__";
+/** Studio's own calls are named `__something`; a plugin may not land on one. */
+const AGENT_INTERNAL_TOOL_PREFIX = "__";
 
 /**
  * Schemes no declaration may name, whatever it says. Studio refuses these in
@@ -117,7 +133,7 @@ export const PLUGIN_RUNTIME_CAPABILITIES = [
  * second source of truth for the same capability, which is how an install prompt
  * and a plugin's real reach drift apart — so it is rejected, not merged.
  */
-export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency", "externalLink"];
+export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency", "externalLink", "agentTools"];
 
 /** Desktop only: web has no process to spawn and the mobile shells are WebViews. */
 const BINARY_PLATFORMS = ["windows", "macos", "linux"];
@@ -736,6 +752,79 @@ function validateWidgetText(value, widgets, errors) {
 }
 
 /**
+ * What a client will be offered a plugin tool as, or null when it cannot be offered at all.
+ *
+ * Port of Studio's `agentPluginToolMcpName`. A name that maps to something longer than 64
+ * characters, to an empty tool part, to one with no letter or digit in it, or onto Studio's own
+ * `__`-prefixed calls is refused rather than quietly dropped at `tools/list`.
+ */
+function agentPluginToolMcpName(pluginId, name) {
+    if (typeof pluginId !== "string" || !pluginId) {
+        return null;
+    }
+    if (typeof name !== "string" || !AGENT_PLUGIN_TOOL_NAME_PATTERN.test(name) || !name.startsWith(`${pluginId}.`)) {
+        return null;
+    }
+    const local = name.slice(pluginId.length + 1);
+    if (!local || !/[a-z0-9]/.test(local)) {
+        return null;
+    }
+    const flatten = part => part.replace(/[.-]/g, "_");
+    const mapped = `${flatten(pluginId)}${AGENT_PLUGIN_TOOL_SEPARATOR}${flatten(local)}`;
+    return AGENT_MCP_TOOL_NAME_PATTERN.test(mapped) && !mapped.startsWith(AGENT_INTERNAL_TOOL_PREFIX) ? mapped : null;
+}
+
+/**
+ * `contributes.agentTools`: the tools the studio entry may register for AI agents.
+ *
+ * Port of Studio's `validateAgentTools`. Returns the number declared; pushes any problems onto
+ * `errors`. Every name is prefixed with the plugin id like any other contributed id, so one plugin
+ * cannot name another's tool, and must survive the mapping to an advertised name - refused here so
+ * the plugin's author finds out before anyone installs it. `write` is required rather than
+ * defaulted: a declaration that left it out would be shown to the author as a reading tool whatever
+ * the code does.
+ */
+function validateAgentTools(value, pluginId, errors) {
+    if (value === undefined) {
+        return 0;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.agentTools must be an array of { name, write }");
+        return 0;
+    }
+    const advertised = new Set();
+    for (const item of value) {
+        if (!isRecord(item)) {
+            errors.push("contributes.agentTools entries must be objects with name and write");
+            continue;
+        }
+        const name = typeof item.name === "string" ? item.name.trim() : "";
+        if (!pluginId || !name.startsWith(`${pluginId}.`)) {
+            errors.push(`contributed agent tool must be prefixed with the plugin id: ${name || "(no name)"}`);
+            continue;
+        }
+        if (!AGENT_PLUGIN_TOOL_NAME_PATTERN.test(name)) {
+            errors.push(`contributed agent tool may use only lower-case letters, digits, "_", "." and "-": ${name}`);
+            continue;
+        }
+        const mcpName = agentPluginToolMcpName(pluginId, name);
+        if (!mcpName) {
+            errors.push(`contributed agent tool ${name} cannot be offered to agents: its advertised name would be `
+                + "longer than 64 characters, empty, or one of Studio's own");
+            continue;
+        }
+        if (advertised.has(mcpName)) {
+            errors.push(`contributed agent tool ${name} is declared twice (or collides with another once "." and "-" become "_")`);
+        }
+        advertised.add(mcpName);
+        if (typeof item.write !== "boolean") {
+            errors.push(`contributed agent tool ${name} must say whether it changes the project (write: true or false)`);
+        }
+    }
+    return value.length;
+}
+
+/**
  * `contributes.structs`: the row shapes a plugin's nodes hand out, which a list in the author's
  * project can then use as its row shape. Pushes any problems onto `errors`. A port of Studio's
  * `validateStructContributions`: each entry has an id prefixed with the plugin id and not used
@@ -1115,6 +1204,15 @@ export function validatePluginManifest(value) {
                 : [];
             validateWidgetText(value.contributes.widgetText, declaredWidgets, errors);
             validateStructs(value.contributes.structs, id, errors);
+            const agentTools = validateAgentTools(value.contributes.agentTools, id, errors);
+
+            const agentGuide = value.contributes.agentGuide;
+            if (agentGuide !== undefined) {
+                const relative = typeof agentGuide === "string" ? agentGuide.trim() : "";
+                if (!relative || !isSafeRelativeEntry(relative) || !relative.toLowerCase().endsWith(".md")) {
+                    errors.push("contributes.agentGuide must be a relative path to a Markdown file inside the plugin package");
+                }
+            }
 
             // Capabilities, sidecars and addresses are powers of the *runtime*
             // entry. Declaring them without one asks the user to approve
@@ -1132,6 +1230,11 @@ export function validatePluginManifest(value) {
                 if (network > 0) {
                     errors.push("contributes.network requires a runtime entry");
                 }
+            }
+
+            // Agent tools are the *studio* entry's: that is what registers them.
+            if (agentTools > 0 && !(isRecord(entries) && typeof entries.studio === "string")) {
+                errors.push("contributes.agentTools requires a studio entry");
             }
         }
     }
