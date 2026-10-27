@@ -46,7 +46,31 @@ export const PLUGIN_CONTRIBUTES_KEYS = [
     "buildConfig",
     "externalLinks",
     "network",
+    "widgetText",
+    "structs",
+    "agentTools",
+    "agentGuide",
 ];
+
+/**
+ * The field types a contributed struct may use: the ones a list's rows understand. Studio's
+ * `UI_STRUCT_FIELD_TYPES` in src/shared/types/ui-editor/struct.ts.
+ */
+export const PLUGIN_STRUCT_FIELD_TYPES = ["string", "number", "boolean", "image", "color", "json"];
+
+/**
+ * A plugin agent tool's own name, and what an MCP client will take as the advertised one.
+ *
+ * Port of Studio's `AGENT_PLUGIN_TOOL_NAME_PATTERN` / `AGENT_MCP_TOOL_NAME_PATTERN` in
+ * `src/shared/agent/pluginTools.ts`. The advertised name is the plugin id and the tool part with
+ * every `.` and `-` turned into `_`, joined by `__` — dots are what some model APIs silently drop a
+ * whole tool for, which is the only reason the mapping exists.
+ */
+const AGENT_PLUGIN_TOOL_NAME_PATTERN = /^[a-z0-9_.-]+$/;
+const AGENT_MCP_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+const AGENT_PLUGIN_TOOL_SEPARATOR = "__";
+/** Studio's own calls are named `__something`; a plugin may not land on one. */
+const AGENT_INTERNAL_TOOL_PREFIX = "__";
 
 /**
  * Schemes no declaration may name, whatever it says. Studio refuses these in
@@ -109,7 +133,7 @@ export const PLUGIN_RUNTIME_CAPABILITIES = [
  * second source of truth for the same capability, which is how an install prompt
  * and a plugin's real reach drift apart — so it is rejected, not merged.
  */
-export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency", "externalLink"];
+export const PLUGIN_DERIVED_PERMISSION_KINDS = ["runtime", "sidecar", "buildDependency", "externalLink", "agentTools"];
 
 /** Desktop only: web has no process to spawn and the mobile shells are WebViews. */
 const BINARY_PLATFORMS = ["windows", "macos", "linux"];
@@ -648,6 +672,233 @@ function validateNetworkPatterns(value, pluginId, errors) {
     return value.length;
 }
 
+/** A widget prop name, as Studio's `WIDGET_PROP_NAME_PATTERN`. */
+const WIDGET_PROP_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** Props a drawing writes itself, as Studio's `RESERVED_WIDGET_TEXT_PROPS`. */
+export const RESERVED_WIDGET_TEXT_PROPS = ["runtimeTextOrigin", "runtimeTextUnit"];
+
+/**
+ * The props of each contributed widget that hold words a player reads. Pushes any problems onto
+ * `errors`. A port of Studio's `validateWidgetText`: each key must be a declared widget, each entry
+ * names a plain-identifier prop and optionally its key prop (`<prop>LocalizationKey` by default),
+ * a label, labels per locale and `multiline`; no name may be used twice in one widget.
+ */
+function validateWidgetText(value, widgets, errors) {
+    if (value === undefined) {
+        return;
+    }
+    if (!isRecord(value)) {
+        errors.push("contributes.widgetText must be an object keyed by widget type");
+        return;
+    }
+    for (const [type, raw] of Object.entries(value)) {
+        if (!widgets.includes(type)) {
+            errors.push(`contributes.widgetText names a widget not declared in contributes.widgets: ${type}`);
+            continue;
+        }
+        if (!Array.isArray(raw) || raw.length === 0) {
+            errors.push(`contributes.widgetText["${type}"] must be a non-empty array of text props`);
+            continue;
+        }
+        const claimed = new Set();
+        for (const item of raw) {
+            if (!isRecord(item)) {
+                errors.push(`contributes.widgetText["${type}"] entries must be objects with a prop`);
+                continue;
+            }
+            const prop = typeof item.prop === "string" ? item.prop.trim() : "";
+            if (!WIDGET_PROP_NAME_PATTERN.test(prop) || RESERVED_WIDGET_TEXT_PROPS.includes(prop)) {
+                errors.push(`contributes.widgetText["${type}"] has an invalid prop: ${JSON.stringify(item.prop)}`);
+                continue;
+            }
+            const keyProp = item.keyProp === undefined
+                ? `${prop}LocalizationKey`
+                : typeof item.keyProp === "string" ? item.keyProp.trim() : "";
+            if (!WIDGET_PROP_NAME_PATTERN.test(keyProp) || RESERVED_WIDGET_TEXT_PROPS.includes(keyProp)) {
+                errors.push(`contributes.widgetText["${type}"] prop "${prop}" has an invalid keyProp: ${JSON.stringify(item.keyProp)}`);
+                continue;
+            }
+            if (keyProp === prop) {
+                errors.push(`contributes.widgetText["${type}"] prop "${prop}" keeps its key in itself`);
+                continue;
+            }
+            for (const name of [prop, keyProp]) {
+                if (claimed.has(name)) {
+                    errors.push(`contributes.widgetText["${type}"] declares "${name}" more than once`);
+                }
+                claimed.add(name);
+            }
+            if (item.label !== undefined && typeof item.label !== "string") {
+                errors.push(`contributes.widgetText["${type}"] prop "${prop}" label must be a string`);
+            }
+            if (item.multiline !== undefined && typeof item.multiline !== "boolean") {
+                errors.push(`contributes.widgetText["${type}"] prop "${prop}" multiline must be true or false`);
+            }
+            if (item.localized !== undefined) {
+                if (!isRecord(item.localized)) {
+                    errors.push(`contributes.widgetText["${type}"] prop "${prop}" localized must be an object keyed by locale code`);
+                    continue;
+                }
+                for (const [code, label] of Object.entries(item.localized)) {
+                    if (!LOCALE_CODE_PATTERN.test(code)) {
+                        errors.push(`contributes.widgetText["${type}"] prop "${prop}" localized has an invalid locale code: ${code}`);
+                    } else if (typeof label !== "string" || !label.trim()) {
+                        errors.push(`contributes.widgetText["${type}"] prop "${prop}" localized["${code}"] must be a non-empty string`);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * What a client will be offered a plugin tool as, or null when it cannot be offered at all.
+ *
+ * Port of Studio's `agentPluginToolMcpName`. A name that maps to something longer than 64
+ * characters, to an empty tool part, to one with no letter or digit in it, or onto Studio's own
+ * `__`-prefixed calls is refused rather than quietly dropped at `tools/list`.
+ */
+function agentPluginToolMcpName(pluginId, name) {
+    if (typeof pluginId !== "string" || !pluginId) {
+        return null;
+    }
+    if (typeof name !== "string" || !AGENT_PLUGIN_TOOL_NAME_PATTERN.test(name) || !name.startsWith(`${pluginId}.`)) {
+        return null;
+    }
+    const local = name.slice(pluginId.length + 1);
+    if (!local || !/[a-z0-9]/.test(local)) {
+        return null;
+    }
+    const flatten = part => part.replace(/[.-]/g, "_");
+    const mapped = `${flatten(pluginId)}${AGENT_PLUGIN_TOOL_SEPARATOR}${flatten(local)}`;
+    return AGENT_MCP_TOOL_NAME_PATTERN.test(mapped) && !mapped.startsWith(AGENT_INTERNAL_TOOL_PREFIX) ? mapped : null;
+}
+
+/**
+ * `contributes.agentTools`: the tools the studio entry may register for AI agents.
+ *
+ * Port of Studio's `validateAgentTools`. Returns the number declared; pushes any problems onto
+ * `errors`. Every name is prefixed with the plugin id like any other contributed id, so one plugin
+ * cannot name another's tool, and must survive the mapping to an advertised name - refused here so
+ * the plugin's author finds out before anyone installs it. `write` is required rather than
+ * defaulted: a declaration that left it out would be shown to the author as a reading tool whatever
+ * the code does.
+ */
+function validateAgentTools(value, pluginId, errors) {
+    if (value === undefined) {
+        return 0;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.agentTools must be an array of { name, write }");
+        return 0;
+    }
+    const advertised = new Set();
+    for (const item of value) {
+        if (!isRecord(item)) {
+            errors.push("contributes.agentTools entries must be objects with name and write");
+            continue;
+        }
+        const name = typeof item.name === "string" ? item.name.trim() : "";
+        if (!pluginId || !name.startsWith(`${pluginId}.`)) {
+            errors.push(`contributed agent tool must be prefixed with the plugin id: ${name || "(no name)"}`);
+            continue;
+        }
+        if (!AGENT_PLUGIN_TOOL_NAME_PATTERN.test(name)) {
+            errors.push(`contributed agent tool may use only lower-case letters, digits, "_", "." and "-": ${name}`);
+            continue;
+        }
+        const mcpName = agentPluginToolMcpName(pluginId, name);
+        if (!mcpName) {
+            errors.push(`contributed agent tool ${name} cannot be offered to agents: its advertised name would be `
+                + "longer than 64 characters, empty, or one of Studio's own");
+            continue;
+        }
+        if (advertised.has(mcpName)) {
+            errors.push(`contributed agent tool ${name} is declared twice (or collides with another once "." and "-" become "_")`);
+        }
+        advertised.add(mcpName);
+        if (typeof item.write !== "boolean") {
+            errors.push(`contributed agent tool ${name} must say whether it changes the project (write: true or false)`);
+        }
+    }
+    return value.length;
+}
+
+/**
+ * `contributes.structs`: the row shapes a plugin's nodes hand out, which a list in the author's
+ * project can then use as its row shape. Pushes any problems onto `errors`. A port of Studio's
+ * `validateStructContributions`: each entry has an id prefixed with the plugin id and not used
+ * twice, a name, at least one field, and optionally a name per locale; each field has a key, not
+ * used twice in the struct (a field is found by its key), and one of the field types a list
+ * understands. Derives no install permission, so it needs no runtime entry.
+ */
+function validateStructs(value, pluginId, errors) {
+    if (value === undefined) {
+        return;
+    }
+    if (!Array.isArray(value)) {
+        errors.push("contributes.structs must be an array of struct objects");
+        return;
+    }
+    const seen = new Set();
+    for (const entry of value) {
+        if (!isRecord(entry)) {
+            errors.push("contributes.structs entries must be objects with an id, a name and fields");
+            continue;
+        }
+        const id = typeof entry.id === "string" ? entry.id.trim() : "";
+        // Without a valid plugin id there is nothing to check the prefix against; that is
+        // reported once, as the id's own error.
+        if (!id || (pluginId && !id.startsWith(`${pluginId}.`))) {
+            errors.push(`contributes.structs id must be prefixed with the plugin id: ${id || "(no id)"}`);
+            continue;
+        }
+        if (seen.has(id)) {
+            errors.push(`contributes.structs declares "${id}" more than once`);
+            continue;
+        }
+        seen.add(id);
+        const name = typeof entry.name === "string" ? entry.name.trim() : "";
+        if (!name) {
+            errors.push(`contributes.structs["${id}"] needs a name`);
+        }
+        if (!Array.isArray(entry.fields) || entry.fields.length === 0) {
+            errors.push(`contributes.structs["${id}"] needs at least one field`);
+        } else {
+            const keys = new Set();
+            for (const field of entry.fields) {
+                const key = isRecord(field) && typeof field.key === "string" ? field.key.trim() : "";
+                if (!key) {
+                    errors.push(`contributes.structs["${id}"] has a field with no key`);
+                    continue;
+                }
+                const type = isRecord(field) ? field.type : undefined;
+                if (!PLUGIN_STRUCT_FIELD_TYPES.includes(type)) {
+                    errors.push(`contributes.structs["${id}"] field "${key}" has an unsupported type: ${String(type)} `
+                        + `(allowed: ${PLUGIN_STRUCT_FIELD_TYPES.join(", ")})`);
+                }
+                if (keys.has(key)) {
+                    errors.push(`contributes.structs["${id}"] declares field "${key}" more than once`);
+                }
+                keys.add(key);
+            }
+        }
+        if (entry.localized !== undefined) {
+            if (!isRecord(entry.localized)) {
+                errors.push(`contributes.structs["${id}"] localized must be an object keyed by locale code`);
+                continue;
+            }
+            for (const [code, text] of Object.entries(entry.localized)) {
+                if (!LOCALE_CODE_PATTERN.test(code)) {
+                    errors.push(`contributes.structs["${id}"] localized has an invalid locale code: ${code}`);
+                } else if (typeof text !== "string" || !text.trim()) {
+                    errors.push(`contributes.structs["${id}"] localized["${code}"] must be a non-empty string`);
+                }
+            }
+        }
+    }
+}
+
 /** Returns the number of declared sidecars; pushes any problems onto `errors`. */
 function validateSidecars(value, pluginId, dependencyIds, errors) {
     if (value === undefined) {
@@ -948,6 +1199,20 @@ export function validatePluginManifest(value) {
             validateBuildConfig(value.contributes.buildConfig, id, errors);
             const externalLinks = validateExternalLinks(value.contributes.externalLinks, id, errors);
             const network = validateNetworkPatterns(value.contributes.network, id, errors);
+            const declaredWidgets = Array.isArray(value.contributes.widgets)
+                ? value.contributes.widgets.filter(item => typeof item === "string").map(item => item.trim())
+                : [];
+            validateWidgetText(value.contributes.widgetText, declaredWidgets, errors);
+            validateStructs(value.contributes.structs, id, errors);
+            const agentTools = validateAgentTools(value.contributes.agentTools, id, errors);
+
+            const agentGuide = value.contributes.agentGuide;
+            if (agentGuide !== undefined) {
+                const relative = typeof agentGuide === "string" ? agentGuide.trim() : "";
+                if (!relative || !isSafeRelativeEntry(relative) || !relative.toLowerCase().endsWith(".md")) {
+                    errors.push("contributes.agentGuide must be a relative path to a Markdown file inside the plugin package");
+                }
+            }
 
             // Capabilities, sidecars and addresses are powers of the *runtime*
             // entry. Declaring them without one asks the user to approve
@@ -965,6 +1230,11 @@ export function validatePluginManifest(value) {
                 if (network > 0) {
                     errors.push("contributes.network requires a runtime entry");
                 }
+            }
+
+            // Agent tools are the *studio* entry's: that is what registers them.
+            if (agentTools > 0 && !(isRecord(entries) && typeof entries.studio === "string")) {
+                errors.push("contributes.agentTools requires a studio entry");
             }
         }
     }

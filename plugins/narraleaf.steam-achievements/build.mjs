@@ -145,6 +145,21 @@ if (typeof manifest.icon === "string" && manifest.icon.trim()) {
     console.log(`copied ${icon}`);
 }
 
+// The agent guide travels the same way, and for the same reason: Studio reads it
+// out of the *installed* directory. A package that declares one and does not
+// carry it installs cleanly and then answers `agent_guide` with nothing.
+const agentGuide = typeof manifest.contributes?.agentGuide === "string" ? manifest.contributes.agentGuide.trim() : "";
+if (agentGuide) {
+    const source = path.join(root, ...agentGuide.split("/"));
+    if (!fs.existsSync(source)) {
+        throw new Error(`manifest declares contributes.agentGuide "${agentGuide}" but ${source} does not exist`);
+    }
+    const destination = path.join(distDir, ...agentGuide.split("/"));
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(source, destination);
+    console.log(`copied ${agentGuide}`);
+}
+
 console.log("");
 if (included.length) {
     console.log(`Steam bridge included for: ${included.join(", ")}`);
