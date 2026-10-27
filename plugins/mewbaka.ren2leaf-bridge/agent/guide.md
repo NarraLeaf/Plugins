@@ -23,10 +23,12 @@ Tool names below are as your client lists them (`mewbaka_ren2leaf_bridge__<tool>
 - `pack_query {kind, key?, file?}` reads rows of the full scan: speakers, labels, endings,
   screens, python, variables, achievements… Ask for what you need instead of reading
   `inventory.json` whole. Where the README says a cut table continues in `data/inventory.json`
-  or `data/speakers.json`, this is how you read the rest.
+  or `data/speakers.json`, this is how you read the rest. Kind `voice` lists each line's voice
+  file when the game sets `config.auto_voice` (packs from Ren2Leaf 0.3.0 on).
 - `pack_screen {screen, image?}` gives a captured screen's element rectangles at 1920x1080,
   the crops cut from it, and the screenshot with `image: true`. Build interface pages from these
-  rectangles.
+  rectangles. Style values (font size, padding) are not scaled: they are the game's own pixels,
+  and the answer says what to multiply them by.
 - `pack_image {path}` shows any picture the pack carries: screenshots, crops, and speaker
   portraits (`characters/<variable>.png`). The README links pictures by these paths. They are
   scaled down for viewing; real assets come from the game's source.
@@ -39,8 +41,11 @@ Tool names below are as your client lists them (`mewbaka_ren2leaf_bridge__<tool>
 
 - After every `story_apply` of a scene with dialogue: `lines_record {scene, entries}` with each
   say line's source file:line, the Studio line's unit id and its voice file, then
-  `voice_check {scene}`. Rewriting a scene gives every line a new id and silently detaches its
-  voice; `voice_check` is how you see it. Re-record with `replace: true` after a rewrite.
+  `voice_check {scene}`. The unit ids are the `id`s `localization_list {scene, language}` lists
+  in reading order, for any of the project's target languages; `voice_list` has them too, but
+  only once the project has a voice language. Rewriting a scene gives every line a new id and
+  silently detaches its voice; `voice_check` is how you see it. Re-record with `replace: true`
+  after a rewrite.
 - A question only the author can answer: `decision_ask` with options and a recommendation, then
   keep working on something else. Answers come back at the top of later answers from this
   plugin; act on them, then `decision_seen`.

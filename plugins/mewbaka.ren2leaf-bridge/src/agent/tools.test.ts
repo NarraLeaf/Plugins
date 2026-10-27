@@ -21,7 +21,10 @@ function schemaKeys(schema: unknown, found: Set<string>): Set<string> {
     return found;
 }
 
-function harness(options: { frozen?: boolean; units?: { unitId: string; locale: string; text: string; character: null; durationSec: null }[] } = {}) {
+type Scene = { id: string; name: string; storyId: string };
+const DEFAULT_SCENES: Scene[] = [{ id: "scene-1", name: "Opening", storyId: "story-1" }, { id: "scene-2", name: "Opening", storyId: "story-1" }];
+
+function harness(options: { frozen?: boolean; units?: { unitId: string; locale: string; text: string; character: null; durationSec: null }[]; scenes?: Scene[] } = {}) {
     const disk = new Map<string, unknown>();
     const workspace = { frozen: options.frozen ?? false, freezeReason: options.frozen ? "manual" : null };
     const storage = {
@@ -34,7 +37,7 @@ function harness(options: { frozen?: boolean; units?: { unitId: string; locale: 
             voice: { listUnits: async () => options.units ?? [] },
             story: {
                 listStories: () => [{ id: "story-1", name: "Main" }],
-                listScenes: async () => [{ id: "scene-1", name: "Opening", storyId: "story-1" }, { id: "scene-2", name: "Opening", storyId: "story-1" }],
+                listScenes: async () => options.scenes ?? DEFAULT_SCENES,
             },
         },
     } as unknown as PluginApp;
@@ -163,4 +166,31 @@ test("line records resolve the scene and feed the voice check", async () => {
     assert.match(check, /^# 0\/2 recorded voiced lines have a take; 1 records are stale .*; 1 lines have no take yet/);
     assert.match(check, /"kind": "stale"/);
     assert.match(text(await call("port_status")), /Line records: 2 lines in 1 scenes\. Voice: 0\/2/);
+});
+
+test("the voice check finds a scene by its name, as the line records do", async () => {
+    const { call, tools } = harness({ scenes: [{ id: "scene-9", name: "Prologue", storyId: "story-1" }] });
+    text(await call("lines_record", { scene: "Prologue", entries: [{ file: "script.rpy", line: 18, unitId: "u-1" }] }));
+    assert.match(text(await call("voice_check", { scene: "Prologue" })), /^# No voiced lines recorded yet/);
+    assert.match(text(await call("voice_check", { scene: "scene-9" })), /^# No voiced lines recorded yet/);
+    assert.equal(refusal(await call("voice_check", { scene: "Epilogue" })).code, "not_found");
+    // Where the unit ids come from, for a game with no voice language to list them by.
+    assert.match(tools.get("lines_record")!.description, /localization_list/);
+});
+
+test("a captured screen says which pixels its style values are in", async () => {
+    const { store, call } = harness();
+    const built = buildPack({
+        sourcePath: "/packs/p",
+        readme: "# P\n\n## 6　界面截图\n| a | say | [screens/s1.png](screens/s1.png) | 1 | n |",
+        inventory: { schemaVersion: 2, scanner: { name: "ren2leaf-diagnose", version: "0.3.0" }, game: { name: "P", resolution: { width: 1280, height: 720 } } },
+        speakers: null,
+        chapters: null,
+        elements: [{ fileName: "s1.elements.json", json: { key: "s1", gameSize: [1280, 720], elements: [{ type: "Text", rect1920: [402, 877.5, 990, 42], text: "Hi", style: { size: 22 } }] } }],
+    }, "2026-10-27T00:00:00Z");
+    await store.write({ pack: built.pack, inventory: built.inventory, screens: built.screens, decisions: { version: 1, items: built.decisions } });
+    const screen = text(await call("pack_screen", { screen: "s1" }));
+    assert.match(screen, /rect is \[x, y, w, h\] at 1920x1080, but style values are the game's own pixels at 1280 wide: multiply them by 1\.5 \(size 22 is 33 at 1920\)/);
+    // A 0.3.0 pack carries no known-error notes.
+    assert.doesNotMatch(screen, /Known pack error/);
 });

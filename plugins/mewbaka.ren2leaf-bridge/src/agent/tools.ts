@@ -21,7 +21,7 @@ import {
     type IssueInput,
     type LedgerPatch,
 } from "../model";
-import { caveatsForKind, caveatsForSection } from "../pack/caveats";
+import { caveatsForKind, caveatsForSection, type PackFacts } from "../pack/caveats";
 import { KIND_SPECS, QUERY_KINDS, queryInventory, speakerDecision, type QueryKind } from "../pack/query";
 import { sectionWithChildren } from "../pack/readme";
 import { collectNotices, portStatus, renderAnswer, voiceSummary, type Answer } from "../status";
@@ -70,6 +70,8 @@ async function findScene(app: PluginApp, ref: string): Promise<{ id: string; nam
 
 export function createTools(app: PluginApp, store: BridgeStore): PluginAgentToolDef[] {
     const answer = (body: Answer): string => renderAnswer({ ...body, notices: collectNotices(store.snapshot) });
+    /** What the caveats check, so a note about achievements stays off a game that has none. */
+    const facts = (): PackFacts => ({ inventory: store.snapshot.inventory?.inventory ?? null, chapters: store.snapshot.pack?.chapters ?? null });
 
     /** Runs a write; rule and freeze failures become refusals the agent can act on. */
     const writing = async (work: () => Promise<PluginAgentToolResult>): Promise<PluginAgentToolResult> => {
@@ -135,7 +137,7 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                 const start = Math.max(0, int(args.cursor) ?? 0);
                 const page = full.slice(start, start + SECTION_PAGE);
                 const next = start + page.length < full.length ? start + page.length : null;
-                const comments = caveatsForSection(id, pack.scanner.version).map(caveat => `Known pack error (${caveat.id}): ${caveat.text}`);
+                const comments = caveatsForSection(id, pack.scanner.version, facts()).map(caveat => `Known pack error (${caveat.id}): ${caveat.text}`);
                 comments.push(next === null ? `Section ${id}, characters ${start}-${full.length} of ${full.length}.` : `Section ${id}, characters ${start}-${next} of ${full.length}; next page: cursor ${next}.`);
                 return answer({ comments, body: page });
             },
@@ -180,8 +182,11 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                         return migrator ? { ...row, migrator } : row;
                     })
                     : result.rows;
-                const comments = caveatsForKind(kind, pack.scanner.version).map(caveat => `Known pack error (${caveat.id}): ${caveat.text}`);
+                const comments = caveatsForKind(kind, pack.scanner.version, facts()).map(caveat => `Known pack error (${caveat.id}): ${caveat.text}`);
                 comments.push(`${KIND_SPECS[kind].about}. Source: static scan (扫描) by ${pack.scanner.name} ${pack.scanner.version}.`);
+                if (kind === "voice" && result.total === 0) {
+                    comments.push("Either the game does not set config.auto_voice, or the pack was written before Ren2Leaf 0.3.0 worked the files out. Voice named by `voice` statements is on speaker rows (voiceDirs).");
+                }
                 comments.push(result.total === 0
                     ? "No rows match."
                     : `Rows ${(int(args.cursor) ?? 0) + 1}-${(int(args.cursor) ?? 0) + rows.length} of ${result.total}${result.nextCursor === null ? "." : `; next page: cursor ${result.nextCursor}.`}`);
@@ -193,6 +198,7 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
             title: "Read a captured screen",
             description: [
                 "One screen of the original game as the migrator captured it running: every element's rectangle at 1920x1080 (x, y, w, h), its text, image file, style and defining line in the source. With `image: true`, the screenshot itself is attached, scaled to 1280 wide; the rectangles stay in 1920x1080.",
+                "Style values (font size, padding, minimums) are not scaled: they are the game's own pixels, so multiply them by 1920 / the game's width, as the answer says.",
                 "Without `screen`, lists the captures with their labels and the Ren'Py screens each shows. `screen` matches a capture key, its label, or a Ren'Py screen name.",
                 "Use it when rebuilding an interface page: place elements from these rectangles rather than from reading screens.rpy, then compare with ui_screenshot.",
             ].join(" "),
@@ -210,7 +216,7 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                 const screens = store.snapshot.screens;
                 if (!pack || !screens) return NO_PACK();
                 const ref = str(args.screen);
-                const caveats = caveatsForKind("screen", pack.scanner.version).map(caveat => `Known pack error (${caveat.id}): ${caveat.text}`);
+                const caveats = caveatsForKind("screen", pack.scanner.version, facts()).map(caveat => `Known pack error (${caveat.id}): ${caveat.text}`);
                 if (!ref) {
                     return answer({
                         comments: [...caveats, `${pack.shots.length} captures. Read one with screen: "<key, label or screen name>".`],
@@ -227,9 +233,13 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                 }
                 const shot = matches.find(entry => entry.key === ref) ?? matches[0]!;
                 const elements = screens.shots[shot.key]?.elements ?? [];
+                const width = screens.shots[shot.key]?.gameSize?.[0] ?? pack.game.width;
+                const styleUnits = width && width !== 1920
+                    ? `style values are the game's own pixels at ${width} wide: multiply them by ${+(1920 / width).toFixed(4)} (size 22 is ${+(22 * 1920 / width).toFixed(1)} at 1920).`
+                    : width === 1920 ? "style values are in the same 1920x1080 pixels." : "style values are the game's own pixels, not scaled to 1920; the game's width is not in the pack.";
                 const comments = [
                     ...caveats,
-                    `Capture ${shot.key} "${shot.label}", screens: ${shot.screens.join(", ") || "?"}. ${elements.length} elements; rect is [x, y, w, h] at 1920x1080. Source: engine (引擎), captured from the running game.`,
+                    `Capture ${shot.key} "${shot.label}", screens: ${shot.screens.join(", ") || "?"}. ${elements.length} elements; rect is [x, y, w, h] at 1920x1080, but ${styleUnits} Source: engine (引擎), captured from the running game.`,
                 ];
                 const files = store.snapshot.images?.files ?? {};
                 const crops = Object.entries(files).filter(([path, file]) => file.kind === "crop" && path.startsWith(`screens/${shot.key}-`));
@@ -291,16 +301,23 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
             ].join(" "),
             inputSchema: {
                 type: "object",
-                properties: { scene: { type: "string", description: "Scene id; all recorded scenes when omitted." } },
+                properties: { scene: { type: "string", description: "Scene id, or its name when unique; all recorded scenes when omitted." } },
                 additionalProperties: false,
             },
             write: false,
             handler: async args => {
-                const scene = str(args.scene);
-                const report = await runVoiceCheck(app, store, scene);
-                if (scene && !store.snapshot.lines.scenes[scene]) {
-                    return refuse("not_found", `No line records for scene ${scene}.`, `Record its lines with ${tool(TOOL.linesRecord)} after writing the scene.`);
+                const ref = str(args.scene);
+                // An id with records, or a scene found by id or name the way lines_record finds it.
+                let scene = ref;
+                if (ref && !store.snapshot.lines.scenes[ref]) {
+                    const found = await findScene(app, ref);
+                    if ("error" in found) return refuse("not_found", found.error);
+                    scene = found.id;
                 }
+                if (scene && !store.snapshot.lines.scenes[scene]) {
+                    return refuse("not_found", `No line records for scene ${ref}.`, `Record its lines with ${tool(TOOL.linesRecord)} after writing the scene.`);
+                }
+                const report = await runVoiceCheck(app, store, scene);
                 return answer({
                     comments: [voiceSummary(report), `The same check runs as the Studio test ${TEST_VOICE_LEDGER}.`],
                     data: report.problems.slice(0, 400),
@@ -485,6 +502,7 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
             title: "Record where lines landed",
             description: [
                 "After writing a scene, record for each say line of the original where it landed: source file and line, the Studio line's unit id (its textId, the key voice uses), and the original voice file if it had one.",
+                "Unit ids: localization_list {scene, language: any of the project's target languages} lists the scene's lines in reading order, each with its `id`. voice_list gives the same ids, but only once the project has a voice language.",
                 "These records are what voice_check and the voice test compare against, and the only link from a Studio line back to the source.",
                 "After rewriting a scene, record it again with replace: true: its lines have new ids.",
             ].join(" "),

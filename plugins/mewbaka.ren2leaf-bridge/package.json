@@ -1,6 +1,6 @@
 {
   "name": "@narraleaf-plugins/ren2leaf-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Bring a Ren2Leaf pack into the project, so an agent porting a Ren'Py game queries it, records its progress and asks the author through Studio.",
   "license": "MPL-2.0",
