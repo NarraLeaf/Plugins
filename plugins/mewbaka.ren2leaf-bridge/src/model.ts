@@ -222,6 +222,36 @@ export function answerDecision(store: DecisionsStore, id: string, answer: { opti
     };
 }
 
+export type ConversationAnswer = { optionId?: string; text?: string; quote?: string };
+
+/**
+ * The agent records an answer the author gave it in their conversation. The author already said it,
+ * so the agent has read it; the author's own words go in `quote`, so the panel shows what was said
+ * rather than the agent's reading of it. Only an open question takes one: an answer the author gave
+ * in the panel is theirs, and changing it is theirs too.
+ */
+export function recordConversationAnswer(store: DecisionsStore, id: string, input: ConversationAnswer, now: string): DecisionsStore {
+    const decision = store.items.find(item => item.id === id);
+    if (!decision) throw new RuleError(`No decision ${id}.`, undefined, "not_found");
+    if (decision.origin === "pack") throw new RuleError("Decisions from the pack are changed in Ren2Leaf, not here.");
+    if (decision.status === "answered") throw new RuleError(`${id} is already answered: ${answerSummary(decision)}. Only the author changes an answer, in the panel.`);
+    if (decision.status === "withdrawn") throw new RuleError(`${id} was withdrawn. Ask again if it still needs an answer.`);
+    const quote = text(input.quote);
+    if (!quote) throw new RuleError("Quote the author's own words: an answer is recorded only when the author gave it.");
+    const optionId = text(input.optionId);
+    if (optionId && !decision.options.some(option => option.id === optionId)) {
+        throw new RuleError(`Option ${optionId} is not one of this decision's options.`);
+    }
+    const recorded: NonNullable<Decision["answer"]> = { at: now, via: "conversation", quote };
+    if (optionId) recorded.optionId = optionId;
+    const words = text(input.text);
+    if (words) recorded.text = words;
+    return {
+        version: 1,
+        items: store.items.map(item => item.id === id ? { ...item, status: "answered", answer: recorded, seenByAgent: true } : item),
+    };
+}
+
 export function withdrawDecision(store: DecisionsStore, id: string): DecisionsStore {
     return {
         version: 1,

@@ -40,6 +40,7 @@ const en: Record<string, string> = {
     "decisions.change": "Change answer",
     "decisions.withdraw": "Withdraw",
     "decisions.unread": "Not yet read by the agent",
+    "decisions.viaConversation": "Answered to the agent in conversation: “{quote}”",
     "decisions.source": "Source",
 
     "ledger.filter": "Status",
@@ -153,6 +154,7 @@ const zh: Record<string, string> = {
     "decisions.change": "修改回答",
     "decisions.withdraw": "撤回",
     "decisions.unread": "Agent 尚未读取",
+    "decisions.viaConversation": "在对话中答复 Agent：「{quote}」",
     "decisions.source": "出处",
 
     "ledger.filter": "状态",

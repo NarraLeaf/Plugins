@@ -144,6 +144,24 @@ test("an answer from the author reaches the agent at the top of its next answer"
     assert.doesNotMatch(text(await call("port_status")), /^# Ren2Leaf Bridge/);
 });
 
+test("an answer the author gives in conversation is recorded, at once or later", async () => {
+    const { store, call } = harness();
+    const asked = text(await call("decision_ask", { question: "Keep the extra ending?", options: [{ label: "Keep" }, { label: "Drop" }] }));
+    assert.match(asked, /decision_answer/);
+    assert.match(text(await call("decision_answer", { id: "d-1", quote: "Keep it", optionId: "a" })), /Recorded the author's answer to d-1/);
+    assert.equal(store.snapshot.decisions.items[0]!.status, "answered");
+    assert.match(refusal(await call("decision_answer", { id: "d-1", quote: "Drop it" })).message, /already answered/);
+    // No notice: the agent was there when the author said it.
+    assert.doesNotMatch(text(await call("port_status")), /^# Ren2Leaf Bridge/);
+
+    const both = text(await call("decision_ask", { question: "Is ??? the heroine?", answered: { quote: "Yes, it's her", optionId: "a" }, options: [{ label: "Yes" }, { label: "No" }] }));
+    assert.match(both, /Recorded as d-2, answered in conversation/);
+    const d2 = store.snapshot.decisions.items[1]!;
+    assert.equal(d2.status, "answered");
+    assert.equal(d2.answer?.via, "conversation");
+    assert.equal(d2.answer?.quote, "Yes, it's her");
+});
+
 test("rules and the freeze come back as refusals", async () => {
     const { call, workspace, disk } = harness();
     const dropped = refusal(await call("ledger_upsert", { items: [{ id: "a", area: "extras", title: "Gallery", plan: "p", status: "dropped" }] }));
@@ -225,12 +243,12 @@ test("voice_check and port_status hold the records against the pack's own scan",
     ] }));
     const check = text(await call("voice_check"));
     assert.match(check, /^# 2\/2 recorded voiced lines have a take\./);
-    assert.match(check, /# Against the pack's scan: say lines match the pack in 0 of 1 recorded files, 1 fewer recorded \(the game has 1 extend lines\); voice differs from the pack in 1 files\./);
+    assert.match(check, /# Against the pack's scan: say lines match the pack in 0 of 1 recorded file, 1 fewer recorded \(the game has 1 extend line\); voice differs from the pack in 1 file\./);
     assert.match(check, /# Voices that play during a `pause`/);
     assert.match(check, /"code": "voice-differs"/);
     assert.match(check, /the pack has 3 voiced say lines, 2 records carry a voice file/);
     const status = text(await call("port_status"));
-    assert.match(status, /Against the pack's scan: .*voice differs from the pack in 1 files/);
+    assert.match(status, /Against the pack's scan: .*voice differs from the pack in 1 file/);
     assert.match(status, /script\/c1\.rpy: the pack has 3 voiced say lines, 2 records carry a voice file/);
     // The Studio test reports the same differences as warnings and info, and still passes.
     const findings: { severity: string; ruleId?: string; message: { text?: string } }[] = [];

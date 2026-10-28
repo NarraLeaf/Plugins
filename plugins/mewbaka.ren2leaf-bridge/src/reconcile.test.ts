@@ -67,7 +67,7 @@ test("per file, records are held against the pack's say lines and voiced lines",
     assert.match(report.findings.find(finding => finding.code === "lines-fewer")!.text, /-2 \(pack 10 say lines, 8 recorded\).*extend.*\(the game has 2 extend lines in all\)/);
     // The excluded file has no say lines, so there is nothing to say about it.
     assert.ok(!report.findings.some(finding => finding.file === "script/script.rpy"));
-    assert.match(reconcileSummary(report), /say lines match the pack in 1 of 2 recorded files, 2 fewer recorded \(the game has 2 extend lines\); 1 files with say lines have no records; voice differs from the pack in 1 files/);
+    assert.match(reconcileSummary(report), /say lines match the pack in 1 of 2 recorded files, 2 fewer recorded \(the game has 2 extend lines\); 1 file with say lines has no records; voice differs from the pack in 1 file/);
 });
 
 test("a shortfall the extend lines cannot explain, and more records than source lines, are warnings", () => {

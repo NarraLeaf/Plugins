@@ -46,6 +46,7 @@ the sidebar carries a dot and its title the count, and opening the project says 
 | `voice_check` | no | Recorded voiced lines whose voice is no longer on the line; per-file differences from the pack's scan |
 | `ledger_upsert` | yes | Add to or update the feature checklist |
 | `decision_ask` | yes | Ask the author a question |
+| `decision_answer` | yes | Record an answer the author gave in conversation |
 | `decision_seen` | yes | Mark answers as read |
 | `issue_add` | yes | Record a Studio problem |
 | `log_note` | yes | Record a phase change or a mapping decision |

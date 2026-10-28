@@ -1,5 +1,5 @@
 /**
- * The tools an agent porting a Ren'Py game calls through Studio's MCP endpoint. Six read, six
+ * The tools an agent porting a Ren'Py game calls through Studio's MCP endpoint. Six read, seven
  * write. Every answer opens with the notices from `collectNotices` - the only way the plugin has to
  * tell an agent something it did not ask for - and then the data.
  *
@@ -14,9 +14,11 @@ import {
     addLogNote,
     askDecision,
     markSeen,
+    recordConversationAnswer,
     recordLines,
     RuleError,
     upsertLedger,
+    type ConversationAnswer,
     type DecisionAsk,
     type IssueInput,
     type LedgerPatch,
@@ -393,7 +395,8 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
             title: "Ask the author",
             description: [
                 "Ask the author a question only they can answer (who a speaker really is, whether a feature may differ, which of two looks is right). It appears in the Ren2Leaf Bridge panel with your options and recommendation.",
-                "Do not wait for the answer: carry on with other work. The answer reaches you at the top of any later answer from this plugin, and in port_status.",
+                "When you are in a conversation with the author, ask them there as well: the panel is the record, not a substitute for asking. If they have already answered you there, pass their words in `answered` and the question is recorded as answered; if they answer later, record it with decision_answer.",
+                "When the author is not in the conversation, do not wait for the answer: carry on with other work. The answer reaches you at the top of any later answer from this plugin, and in port_status.",
                 "Give 2-4 options with their consequence, recommend one, and cite the source lines. A question you can settle yourself from the source is not one to ask.",
                 "Asking the same open question twice returns the existing one.",
             ].join(" "),
@@ -411,6 +414,13 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                         },
                     },
                     recommended: { type: "string", description: "Id of the option you recommend." },
+                    answered: {
+                        type: "object",
+                        description: "The author's answer, given to you in conversation. `quote`: their own words, verbatim. `optionId` when it picks one of your options; `text` for your one-line reading of it.",
+                        properties: { quote: { type: "string" }, optionId: { type: "string" }, text: { type: "string" } },
+                        required: ["quote"],
+                        additionalProperties: false,
+                    },
                     source: {
                         type: "array",
                         items: { type: "object", properties: { file: { type: "string" }, line: { type: "integer" } }, required: ["file"] },
@@ -421,14 +431,53 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
             },
             write: true,
             handler: args => writing(async () => {
-                const result = askDecision(store.snapshot.decisions, args as unknown as DecisionAsk, new Date().toISOString());
+                const { answered, ...ask } = args as unknown as DecisionAsk & { answered?: ConversationAnswer };
+                const now = new Date().toISOString();
+                const result = askDecision(store.snapshot.decisions, ask, now);
+                if (answered) {
+                    // One write, so the panel never shows it open and the author is not told about a
+                    // question they have just answered.
+                    const decisions = recordConversationAnswer(result.store, result.decision.id, answered, now);
+                    await store.write({ decisions });
+                    return answer({
+                        comments: [`Recorded as ${result.decision.id}, answered in conversation.`],
+                        data: { id: result.decision.id },
+                    });
+                }
                 if (!result.existed) await store.write({ decisions: result.store });
                 return answer({
                     comments: [result.existed
                         ? `The same question is already open as ${result.decision.id}.`
-                        : `Asked as ${result.decision.id}. Keep working; the answer will come back at the top of a later answer.`],
+                        : `Asked as ${result.decision.id}. If the author is in the conversation, ask them there too and record their reply with ${tool(TOOL.decisionAnswer)}; otherwise keep working, and the answer will come back at the top of a later answer.`],
                     data: { id: result.decision.id },
                 });
+            }),
+        },
+        {
+            name: TOOL.decisionAnswer,
+            title: "Record the author's answer from the conversation",
+            description: [
+                "Record an answer the author gave you in your conversation to an open question you asked with decision_ask, so the panel, port_status and the ledger see it answered and the author is no longer reminded of it.",
+                "`quote` is the author's own words, verbatim. Record only an answer the author actually gave: never one you inferred, and never your recommendation standing in for theirs.",
+                "An answer the author gave in the panel cannot be overwritten here; only the author changes it.",
+            ].join(" "),
+            inputSchema: {
+                type: "object",
+                properties: {
+                    id: { type: "string", description: "The decision id, d-N." },
+                    quote: { type: "string", description: "The author's words, verbatim." },
+                    optionId: { type: "string", description: "The option their answer picks, if it picks one." },
+                    text: { type: "string", description: "Your one-line reading of the answer, when the quote alone is unclear." },
+                },
+                required: ["id", "quote"],
+                additionalProperties: false,
+            },
+            write: true,
+            handler: args => writing(async () => {
+                const { id, ...given } = args as { id: string } & ConversationAnswer;
+                const decisions = recordConversationAnswer(store.snapshot.decisions, id, given, new Date().toISOString());
+                await store.write({ decisions });
+                return answer({ comments: [`Recorded the author's answer to ${id}.`], data: { id } });
             }),
         },
         {

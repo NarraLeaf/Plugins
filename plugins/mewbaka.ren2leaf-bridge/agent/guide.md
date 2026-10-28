@@ -54,9 +54,13 @@ Tool names below are as your client lists them (`mewbaka_ren2leaf_bridge__<tool>
   is -1, a merge split back into two rows +1, a file the migrator excluded or the game cannot
   reach may be left out on purpose (log why). Anything else is a lost, doubled or misplaced line.
   Voices that play during a `pause` or a `menu` are in neither count: find them in the source.
-- A question only the author can answer: `decision_ask` with options and a recommendation, then
-  keep working on something else. Answers come back at the top of later answers from this
-  plugin; act on them, then `decision_seen`.
+- A question only the author can answer: `decision_ask` with options and a recommendation. If
+  the author is in your conversation, ask them there as well - the panel keeps the question and
+  its answer across sessions, it does not replace asking. When they answer you there, record it:
+  `answered {quote, optionId?}` on `decision_ask` if they already have, or `decision_answer {id,
+  quote}` later. `quote` is their own words; record only an answer they gave. If the author is
+  not in the conversation, carry on with other work: answers given in the panel come back at the
+  top of later answers from this plugin; act on them, then `decision_seen`.
 - Never drop a feature yourself. `ledger_upsert` refuses `dropped` without an answered decision.
 - Record each mapping decision with `log_note {topic, decision, reason}` and each phase change
   with `log_note {phase}`. Record Studio problems with `issue_add`, exactly as they happened.

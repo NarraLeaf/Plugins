@@ -119,7 +119,11 @@ export type Decision = {
     options: DecisionOption[];
     recommended?: string;
     status: "open" | "answered" | "withdrawn";
-    answer?: { optionId?: string; text?: string; at: string };
+    /**
+     * `via: "conversation"` is an answer the author gave the agent in its own conversation, which the
+     * agent recorded with the author's words in `quote`; without `via` it was given in the panel.
+     */
+    answer?: { optionId?: string; text?: string; at: string; via?: "conversation"; quote?: string };
     /** False from the moment the author answers until the agent calls `decision_seen`. */
     seenByAgent: boolean;
     askedAt: string;

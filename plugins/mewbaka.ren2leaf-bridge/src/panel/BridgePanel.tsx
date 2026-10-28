@@ -199,7 +199,10 @@ function DecisionCard({ ctx, decision }: { ctx: Ctx; decision: Decision }) {
                 {decision.source.length > 0 && <div style={quiet}>{t("decisions.source")}: {sources(decision.source)}</div>}
                 {decision.status === "answered" && !editing && (
                     <>
-                        <div style={block}>{answerSummary(decision)}</div>
+                        {answerSummary(decision) && <div style={block}>{answerSummary(decision)}</div>}
+                        {decision.answer?.via === "conversation" && (
+                            <div style={quiet}>{t("decisions.viaConversation", { quote: decision.answer.quote ?? "" })}</div>
+                        )}
                         {!decision.seenByAgent && <div style={quiet}>{t("decisions.unread")}</div>}
                         {decision.origin === "agent" && (
                             <div style={row}>

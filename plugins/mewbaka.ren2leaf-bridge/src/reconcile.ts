@@ -312,6 +312,9 @@ export function reconcileWithPack(lines: LinesStore, inventory: Record<string, u
     return { lines: hasLines, voice: hasVoice, extendLines, shortfall, surplus, files, findings };
 }
 
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+const files = (count: number) => plural(count, "file", "files");
+
 /** One line for `port_status` and the head of `voice_check`. */
 export function reconcileSummary(report: Reconciliation): string {
     const parts: string[] = [];
@@ -319,16 +322,16 @@ export function reconcileSummary(report: Reconciliation): string {
         const compared = report.files.filter(file => file.packLines !== null && file.recordedLines > 0);
         const differing = compared.filter(file => file.recordedLines !== file.packLines);
         const pending = report.files.filter(file => file.packLines && file.recordedLines === 0).length;
-        parts.push(`say lines match the pack in ${compared.length - differing.length} of ${compared.length} recorded files`
-            + (report.shortfall ? `, ${report.shortfall} fewer recorded${report.extendLines === null ? "" : ` (the game has ${report.extendLines} extend lines)`}` : "")
+        parts.push(`say lines match the pack in ${compared.length - differing.length} of ${compared.length} recorded ${compared.length === 1 ? "file" : "files"}`
+            + (report.shortfall ? `, ${report.shortfall} fewer recorded${report.extendLines === null ? "" : ` (the game has ${plural(report.extendLines, "extend line", "extend lines")})`}` : "")
             + (report.surplus ? `, ${report.surplus} more recorded than the pack has` : "")
-            + (pending ? `; ${pending} files with say lines have no records` : ""));
+            + (pending ? `; ${files(pending)} with say lines ${pending === 1 ? "has" : "have"} no records` : ""));
     } else {
         parts.push("the pack cannot reconcile line counts (no per-file say counts)");
     }
     if (report.voice) {
         const voiceDiffers = report.findings.filter(finding => finding.code === "voice-differs").length;
-        parts.push(voiceDiffers ? `voice differs from the pack in ${voiceDiffers} files` : "voiced lines match the pack in every recorded file");
+        parts.push(voiceDiffers ? `voice differs from the pack in ${files(voiceDiffers)}` : "voiced lines match the pack in every recorded file");
     } else {
         parts.push("the pack cannot reconcile voice (no per-file voice counts)");
     }
