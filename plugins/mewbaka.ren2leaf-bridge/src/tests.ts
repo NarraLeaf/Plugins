@@ -7,6 +7,7 @@
 import type { PluginApp, PluginTranslator, TestDefinition, TestFinding } from "narraleaf-studio/plugin";
 import { runVoiceCheck } from "./agent/tools";
 import { TEST_VOICE_LEDGER } from "./ids";
+import { PAUSE_VOICE_NOTE, reconcileWithPack, type ReconcileFinding } from "./reconcile";
 import type { BridgeStore } from "./store";
 import type { VoiceProblem } from "./voice";
 
@@ -38,6 +39,13 @@ export function voiceLedgerTest(app: PluginApp, store: BridgeStore, t: PluginTra
         return result;
     };
 
+    const reconcileFinding = (item: ReconcileFinding): TestFinding => ({
+        severity: item.level,
+        ruleId: `ren2leaf-bridge/pack-${item.code}`,
+        message: { text: t.t(`test.pack.${item.code}`, item.params) },
+        englishMessage: item.text,
+    });
+
     return {
         id: TEST_VOICE_LEDGER,
         title: { text: t.t("test.voice.title") },
@@ -59,7 +67,21 @@ export function voiceLedgerTest(app: PluginApp, store: BridgeStore, t: PluginTra
                     englishMessage: `${report.strayTakes} voice takes sit on lines that no longer exist.`,
                 });
             }
-            const summary = { text: t.t("test.voice.summary", { linked: report.linked, total: report.voicedLines }) };
+            // Against the pack's own scan: information and warnings, never a failure, because some
+            // differences are the port's to explain (extend lines merged, a file left out on purpose).
+            const pack = store.snapshot.pack;
+            let differences = 0;
+            if (pack) {
+                const reconciled = reconcileWithPack(store.snapshot.lines, store.snapshot.inventory?.inventory ?? null, pack.chapters);
+                for (const item of reconciled.findings) {
+                    if (item.level === "warning") differences++;
+                    ctx.report(reconcileFinding(item));
+                }
+                if (reconciled.voice) {
+                    ctx.report({ severity: "info", ruleId: "ren2leaf-bridge/pack-pause-voice", message: { text: t.t("test.pack.pauseVoice") }, englishMessage: PAUSE_VOICE_NOTE });
+                }
+            }
+            const summary = { text: t.t(differences ? "test.voice.summaryPack" : "test.voice.summary", { linked: report.linked, total: report.voicedLines, differences }) };
             return report.problems.length ? { status: "failed", summary } : { status: "passed", summary };
         },
     };

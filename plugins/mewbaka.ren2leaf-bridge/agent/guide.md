@@ -33,7 +33,8 @@ Tool names below are as your client lists them (`mewbaka_ren2leaf_bridge__<tool>
   portraits (`characters/<variable>.png`). The README links pictures by these paths. They are
   scaled down for viewing; real assets come from the game's source.
 - Lines starting `# Known pack error` are mistakes Ren2Leaf is known to make in that section
-  or kind. Check them against the source before relying on the rows.
+  or kind, for the Ren2Leaf version that wrote the pack: ones a later Ren2Leaf fixed drop out,
+  ones still open stay on. Check them against the source before relying on the rows.
 - Rows marked 迁移者 are the migrator's decisions and are settled. Rows from 扫描 (scan) and
   引擎 (engine) are evidence.
 
@@ -46,6 +47,13 @@ Tool names below are as your client lists them (`mewbaka_ren2leaf_bridge__<tool>
   only once the project has a voice language. Rewriting a scene gives every line a new id and
   silently detaches its voice; `voice_check` is how you see it. Re-record with `replace: true`
   after a rewrite.
+- `voice_check` and `port_status` also hold the records against the pack's own scan, per source
+  file: the say lines and voiced say lines Ren2Leaf found, against the lines you recorded and
+  those carrying a voice file. This is what catches a line or a voice you never recorded. A
+  difference is not an error, but each needs a reason: an `extend` merged into the line before
+  is -1, a merge split back into two rows +1, a file the migrator excluded or the game cannot
+  reach may be left out on purpose (log why). Anything else is a lost, doubled or misplaced line.
+  Voices that play during a `pause` or a `menu` are in neither count: find them in the source.
 - A question only the author can answer: `decision_ask` with options and a recommendation, then
   keep working on something else. Answers come back at the top of later answers from this
   plugin; act on them, then `decision_seen`.
@@ -58,4 +66,5 @@ Tool names below are as your client lists them (`mewbaka_ren2leaf_bridge__<tool>
 ## Checking
 
 - `test {id: "mewbaka.ren2leaf-bridge.voice-ledger"}` runs the voice check as a Studio test
-  and fails on any recorded voiced line without its voice.
+  and fails on any recorded voiced line without its voice. Differences from the pack's scan come
+  with it as warnings and notes; they do not fail the test.

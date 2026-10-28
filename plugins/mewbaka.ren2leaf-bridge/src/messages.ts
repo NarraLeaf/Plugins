@@ -86,15 +86,31 @@ const en: Record<string, string> = {
     "severity.major": "Major",
     "severity.minor": "Minor",
 
-    "notify.question": "The agent asked: {question}",
+    "panel.titleWaiting": "{name} · {count} waiting",
+    "notify.question": "The agent asked in the Ren2Leaf Bridge panel: {question}",
+    "notify.waiting": "{count} questions from the agent are waiting in the Ren2Leaf Bridge panel, in the left sidebar",
 
     "test.voice.title": "Ren2Leaf: voice on recorded lines",
-    "test.voice.description": "Every line the port recorded with a voice file still has its voice",
+    "test.voice.description": "Every line the port recorded with a voice file still has its voice, and the records agree with the pack's own scan, file by file",
     "test.voice.noRecords": "No line records yet",
     "test.voice.stale": "{source}: the scene was rewritten after its lines were recorded; {voice} is on a line that no longer exists",
     "test.voice.unlinked": "{source}: {voice} is not linked to its line",
     "test.voice.stray": "{count} voice takes sit on lines that no longer exist",
     "test.voice.summary": "{linked} of {total} recorded voiced lines have their voice",
+    "test.voice.summaryPack": "{linked} of {total} recorded voiced lines have their voice; {differences} differences from the pack's scan to explain",
+
+    "test.pack.lines-unavailable": "The pack has no per-file say-line counts, so the line records cannot be checked against its scan",
+    "test.pack.voice-unavailable": "The pack has no per-file voice counts, so the recorded voice files cannot be checked against its scan",
+    "test.pack.file-not-recorded": "{file}: {pack} say lines in the pack, none recorded",
+    "test.pack.file-not-recorded-excluded": "{file}: {pack} say lines in the pack, none recorded; the migrator excluded this file",
+    "test.pack.file-not-recorded-unreachable": "{file}: {pack} say lines in the pack, none recorded; the game cannot reach this file",
+    "test.pack.file-not-in-pack": "{file}: {recorded} lines recorded, but the pack has no say lines in this file",
+    "test.pack.lines-fewer": "{file}: {delta} lines (pack {pack}, recorded {recorded}); extend lines merged into the line before explain this, anything else is a lost line",
+    "test.pack.lines-more": "{file}: {delta} lines (pack {pack}, recorded {recorded}); more records than source lines",
+    "test.pack.shortfall-exceeds-extends": "{shortfall} fewer lines recorded than the pack has, more than the game's {extends} extend lines explain",
+    "test.pack.voice-differs": "{file}: {pack} voiced lines in the pack, {recorded} records carry a voice file",
+    "test.pack.voiced-unplaced": "{count} voiced lines in the pack (narration, one-off speakers) are not counted per file",
+    "test.pack.pauseVoice": "Voices that play during a pause or a menu are in neither count; check them in the source",
 };
 
 const zh: Record<string, string> = {
@@ -183,15 +199,31 @@ const zh: Record<string, string> = {
     "severity.major": "严重",
     "severity.minor": "轻微",
 
-    "notify.question": "Agent 提问：{question}",
+    "panel.titleWaiting": "{name} · {count} 个待答",
+    "notify.question": "Agent 在 Ren2Leaf Bridge 面板中提问：{question}",
+    "notify.waiting": "左侧栏 Ren2Leaf Bridge 面板中有 {count} 个 Agent 的问题待你回答",
 
     "test.voice.title": "Ren2Leaf：已登记台词的配音",
-    "test.voice.description": "迁移中登记了配音文件的每一句台词，配音仍挂在该句上",
+    "test.voice.description": "迁移中登记了配音文件的每一句台词，配音仍挂在该句上；并按文件与补充包的扫描结果核对",
     "test.voice.noRecords": "尚无台词登记",
     "test.voice.stale": "{source}：登记后场景被重写，{voice} 挂在已不存在的台词上",
     "test.voice.unlinked": "{source}：{voice} 未挂到该句台词",
     "test.voice.stray": "{count} 条配音挂在已不存在的台词上",
     "test.voice.summary": "已登记的 {total} 句配音台词中，{linked} 句配音正常",
+    "test.voice.summaryPack": "已登记的 {total} 句配音台词中，{linked} 句配音正常；与补充包扫描结果有 {differences} 处差异待说明",
+
+    "test.pack.lines-unavailable": "补充包没有逐文件的台词数，无法与扫描结果核对台词登记",
+    "test.pack.voice-unavailable": "补充包没有逐文件的配音数，无法与扫描结果核对配音登记",
+    "test.pack.file-not-recorded": "{file}：补充包中有 {pack} 句台词，尚无登记",
+    "test.pack.file-not-recorded-excluded": "{file}：补充包中有 {pack} 句台词，尚无登记；迁移者已排除该文件",
+    "test.pack.file-not-recorded-unreachable": "{file}：补充包中有 {pack} 句台词，尚无登记；游戏流程到达不了该文件",
+    "test.pack.file-not-in-pack": "{file}：已登记 {recorded} 句，但补充包中该文件没有台词",
+    "test.pack.lines-fewer": "{file}：台词数相差 {delta}（补充包 {pack} 句，已登记 {recorded} 句）；extend 并入上一句可解释此差值，其余即为遗漏",
+    "test.pack.lines-more": "{file}：台词数相差 {delta}（补充包 {pack} 句，已登记 {recorded} 句）；登记数多于源码台词",
+    "test.pack.shortfall-exceeds-extends": "已登记台词比补充包少 {shortfall} 句，超出游戏全部 {extends} 句 extend 所能解释的范围",
+    "test.pack.voice-differs": "{file}：补充包中带配音的台词 {pack} 句，登记中带配音文件的 {recorded} 句",
+    "test.pack.voiced-unplaced": "补充包中有 {count} 句带配音的台词（旁白、一次性说话人）未按文件计数",
+    "test.pack.pauseVoice": "在 pause 或菜单期间播放的配音不计入任何一方，需对照源码检查",
 };
 
 export const MESSAGES = { messages: { en, zh }, fallbackLocale: "en" };

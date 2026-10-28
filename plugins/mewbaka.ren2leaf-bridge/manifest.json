@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "mewbaka.ren2leaf-bridge",
   "name": "Ren2Leaf Bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "MewBaka",
   "icon": "icon.png",
   "description": "Bring a Ren2Leaf pack into the project, so an agent porting a Ren'Py game queries it, records its progress and asks the author through Studio.",

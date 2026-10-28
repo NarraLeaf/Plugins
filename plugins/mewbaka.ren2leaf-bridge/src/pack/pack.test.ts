@@ -164,8 +164,8 @@ test("caveats apply by section and kind, and stop at the scanner that fixed them
 });
 
 test("a caveat about something the game does not have stays off its answers", () => {
-    // The Question as Ren2Leaf 0.2.0 scanned it: no achievements, no gallery, no auto_voice, no
-    // image statements, two endings that return, nothing excluded.
+    // A small game as Ren2Leaf 0.2.0 scanned it: no achievements, no gallery, no auto_voice, no
+    // voice, no image statements, no menus, two endings that return, nothing excluded.
     const plain: PackFacts = {
         inventory: {
             extensions: {
@@ -175,7 +175,8 @@ test("a caveat about something the game does not have stays off its answers", ()
                 },
                 facts: { achievements: { wrappers: [], declared: [], unlockPoints: [], granted: [] } },
                 assets: { summary: { imageDefinitions: 0 } },
-                flow: { endings: [{ name: "marry" }], labels: [{ name: "start", out: [{ kind: "jump", to: "rightaway" }] }] },
+                flow: { endings: [{ name: "marry" }], labels: [{ name: "start", reachable: true, out: [{ kind: "jump", to: "rightaway" }] }], menus: [] },
+                speakers: { summary: { voicedLines: 0 }, voiceDirs: [] },
             },
         },
         chapters: { excluded: [] },
@@ -215,4 +216,101 @@ test("queryInventory reads the voice file of each line under auto_voice", () => 
     assert.deepEqual(queryInventory(inventory, { kind: "voice", key: "other_0a1b2c3d" }).rows.map(row => row.line), [4]);
     assert.deepEqual(queryInventory(inventory, { kind: "voice", file: "script.rpy" }).rows.map(row => row.id), ["start_915cb944"]);
     assert.equal(queryInventory({ extensions: { speakers: {} } }, { kind: "voice" }).total, 0);
+});
+
+test("each caveat holds for the scanner versions it names, and open ones stay on for later scanners", () => {
+    const ids = (list: { id: string }[]) => list.map(caveat => caveat.id).sort();
+    const everywhere = (version: string) => ids(["3", "4", "5", "6", "7", "8"].flatMap(section => caveatsForSection(section, version)))
+        .filter((id, index, all) => all.indexOf(id) === index);
+
+    // Fixed in 0.3.0: on for a 0.2.0 pack only.
+    const fixed = ["achievement-location", "auto-voice", "chapter-terms", "defines-as-variables", "excluded-reachable", "gallery-unknown", "image-geometry"];
+    // Still in 0.3.0, or new in it, and not fixed by any Ren2Leaf yet.
+    const open = ["excluded-entry-labels", "gallery-unlock-image", "interface-name-calls", "menus-unreachable", "notify-blueprint", "screens-one-state", "voice-before-pause"];
+
+    const v020 = everywhere("0.2.0");
+    for (const id of [...fixed, ...open]) assert.ok(v020.includes(id), `0.2.0 has ${id}`);
+    assert.ok(!v020.includes("image-geometry-partial"), "the 0.3.0 geometry table does not exist in 0.2.0");
+
+    const v030 = everywhere("0.3.0");
+    for (const id of fixed) assert.ok(!v030.includes(id), `0.3.0 fixed ${id}`);
+    for (const id of [...open, "image-geometry-partial"]) assert.ok(v030.includes(id), `0.3.0 has ${id}`);
+
+    // A scanner newer than this list: what nobody has fixed stays on.
+    assert.deepEqual(everywhere("0.4.1"), v030);
+    assert.equal(caveatsForSection("6", "0.4.1")[0]!.id, "screens-one-state");
+});
+
+test("the 0.3.0 caveats look for what they are about in the scan", () => {
+    const has = (facts: PackFacts, kind: Parameters<typeof caveatsForKind>[0], id: string) =>
+        caveatsForKind(kind, "0.3.0", facts).some(caveat => caveat.id === id);
+    const inventory = (extensions: Record<string, unknown>) => ({ extensions });
+
+    // An excluded file that holds `start` (or splashscreen…) is run by the game whatever the table says.
+    const files = { flow: { files: [
+        { file: "script.rpy", says: 0, labels: [{ name: "splashscreen" }, { name: "start" }] },
+        { file: "debug.rpy", says: 4, labels: [{ name: "test_box" }] },
+    ] } };
+    assert.ok(has({ inventory: inventory(files), chapters: { excluded: ["script.rpy"] } }, "file", "excluded-entry-labels"));
+    assert.ok(!has({ inventory: inventory(files), chapters: { excluded: ["debug.rpy"] } }, "file", "excluded-entry-labels"));
+    assert.ok(!has({ inventory: inventory(files), chapters: { excluded: [] } }, "file", "excluded-entry-labels"));
+    assert.ok(has({ inventory: inventory(files), chapters: null }, "file", "excluded-entry-labels"), "a pack that does not say keeps it");
+
+    // `unlock_image` is a picture the catalogue does not count.
+    const gallery = (images: string[], unlocks: string[]) => inventory({ python: {
+        entries: [{ callee: "g.button", snippet: 'g.button("one")' }],
+        galleries: [{ gallery: "g", button: "one", images, unlocks, conditions: [] }],
+    } });
+    assert.ok(has({ inventory: gallery([], ["cg_one"]), chapters: null }, "gallery", "gallery-unlock-image"));
+    assert.ok(!has({ inventory: gallery(["cg_one"], []), chapters: null }, "gallery", "gallery-unlock-image"));
+
+    // A menu outside any label, or in one the game cannot reach.
+    const menus = (label: string | null, reachable: boolean) => inventory({ flow: {
+        labels: [{ name: "start", reachable: true }, { name: "test", reachable }],
+        unreachable: reachable ? [] : [{ name: "test" }],
+        menus: [{ file: "c1.rpy", line: 10, label: "start", choices: [] }, { file: "c1.rpy", line: 90, label, choices: [] }],
+    } });
+    assert.ok(has({ inventory: menus(null, true), chapters: null }, "menu", "menus-unreachable"));
+    assert.ok(has({ inventory: menus("test", false), chapters: null }, "menu", "menus-unreachable"));
+    assert.ok(!has({ inventory: menus("test", true), chapters: null }, "menu", "menus-unreachable"));
+
+    // renpy.notify, by the API table or by an entry.
+    assert.ok(has({ inventory: inventory({ python: { entries: [], apiUsage: [{ api: "renpy.notify", count: 2 }] } }), chapters: null }, "python", "notify-blueprint"));
+    assert.ok(!has({ inventory: inventory({ python: { entries: [], apiUsage: [{ api: "renpy.pause", count: 2 }] } }), chapters: null }, "python", "notify-blueprint"));
+
+    // Method calls on a name only the interface uses.
+    const iface = (callee: string) => inventory({ python: {
+        entries: [{ kind: "unknownCall", callee, snippet: `${callee}("x")` }],
+        interfaceVariables: [{ name: "cg_rows" }],
+    } });
+    assert.ok(has({ inventory: iface("cg_rows.append"), chapters: null }, "python", "interface-name-calls"));
+    assert.ok(!has({ inventory: iface("other.append"), chapters: null }, "python", "interface-name-calls"));
+
+    // Voice that a pause takes: only for a game with voice.
+    const voice = (voicedLines: number) => inventory({ speakers: { summary: { voicedLines }, voiceDirs: [] } });
+    assert.ok(has({ inventory: voice(12), chapters: null }, "speaker", "voice-before-pause"));
+    assert.ok(!has({ inventory: voice(0), chapters: null }, "speaker", "voice-before-pause"));
+
+    // The 0.3.0 geometry table: on when it lists something, or when the game has an attribute hook.
+    const geometry = (rows: object[], hooks: object[]) => inventory({ assets: { geometry: rows, autoGroups: [] }, python: { entries: [], hooks } });
+    assert.ok(has({ inventory: geometry([{ name: "a" }], []), chapters: null }, "asset", "image-geometry-partial"));
+    assert.ok(has({ inventory: geometry([], [{ hook: "config.adjust_attributes" }]), chapters: null }, "asset", "image-geometry-partial"));
+    assert.ok(!has({ inventory: geometry([], []), chapters: null }, "asset", "image-geometry-partial"));
+});
+
+test("buildPack keeps an ImageButton's other states and reads the 0.3.0 split", () => {
+    const element = compactElement({ type: "ImageButton", rect: [0, 0, 1, 1], image: "gui/start_idle.png", states: { idle: "gui/start_idle.png", hover: "gui/start_hover.png" } });
+    assert.deepEqual(element.states, { idle: "gui/start_idle.png", hover: "gui/start_hover.png" });
+    assert.equal(compactElement({ type: "Image", rect: [0, 0, 1, 1], states: {} }).states, undefined);
+
+    const built = buildPack({
+        sourcePath: "sample",
+        readme: README,
+        inventory: { ...INVENTORY, scanner: { name: "ren2leaf-diagnose", version: "0.3.0" } },
+        speakers: null,
+        chapters: { version: 2, split: { chapters: false, scenes: true, agent: false }, chapters: [{ id: "ch1", title: "", files: ["c1.rpy"] }], excluded: ["script.rpy"] },
+        elements: [],
+    }, "2026-10-28T00:00:00Z");
+    const chapters = built.decisions.find(decision => decision.id === "pack:chapters")!;
+    assert.match(chapters.answer!.text!, /^Split: chapters one chapter, scenes one per label\. ch1: c1\.rpy\. Excluded: script\.rpy\.$/);
 });

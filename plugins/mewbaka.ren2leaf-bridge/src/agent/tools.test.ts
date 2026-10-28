@@ -6,6 +6,7 @@ import { advertisedName, PLUGIN_ID } from "../ids";
 import { answerDecision } from "../model";
 import { buildPack } from "../pack/build";
 import { BridgeStore } from "../store";
+import { voiceLedgerTest } from "../tests";
 import { createTools } from "./tools";
 
 const ALLOWED_SCHEMA_KEYS = new Set(["type", "description", "properties", "required", "items", "enum", "additionalProperties", "minimum", "maximum", "default", "oneOf"]);
@@ -45,7 +46,7 @@ function harness(options: { frozen?: boolean; units?: { unitId: string; locale: 
     const tools = new Map(createTools(app, store).map(def => [def.name.slice(PLUGIN_ID.length + 1), def]));
     const call = async (name: string, args: Record<string, unknown> = {}): Promise<PluginAgentToolResult> =>
         await tools.get(name)!.handler(args, { clientName: "test" });
-    return { store, call, tools, disk, workspace };
+    return { store, call, tools, disk, workspace, app };
 }
 
 function text(result: PluginAgentToolResult): string {
@@ -191,6 +192,56 @@ test("a captured screen says which pixels its style values are in", async () => 
     await store.write({ pack: built.pack, inventory: built.inventory, screens: built.screens, decisions: { version: 1, items: built.decisions } });
     const screen = text(await call("pack_screen", { screen: "s1" }));
     assert.match(screen, /rect is \[x, y, w, h\] at 1920x1080, but style values are the game's own pixels at 1280 wide: multiply them by 1\.5 \(size 22 is 33 at 1920\)/);
-    // A 0.3.0 pack carries no known-error notes.
-    assert.doesNotMatch(screen, /Known pack error/);
+    // Ren2Leaf 0.3.0 still captures each screen in one state.
+    assert.match(screen, /# Known pack error \(screens-one-state\)/);
+});
+
+test("voice_check and port_status hold the records against the pack's own scan", async () => {
+    const units = ["u-1", "u-2", "u-3"].map(unitId => ({ unitId, locale: "ja", text: "line", character: null, durationSec: null }));
+    const { store, call, app } = harness({ units });
+    const built = buildPack({
+        sourcePath: "/packs/p",
+        readme: "# P\n",
+        inventory: {
+            schemaVersion: 2,
+            scanner: { name: "ren2leaf-diagnose", version: "0.3.0" },
+            game: { name: "P" },
+            extensions: {
+                flow: { files: [{ file: "script/c1.rpy", says: 4, playOrder: 0 }] },
+                speakers: { summary: { voicedLines: 3, extendLines: 1 }, speakers: [{ variable: "a", ranges: [{ file: "script/c1.rpy", lines: 4, voiced: 3 }] }] },
+            },
+        },
+        speakers: null,
+        chapters: null,
+        elements: [],
+    }, "2026-10-28T00:00:00Z");
+    await store.write({ pack: built.pack, inventory: built.inventory, decisions: { version: 1, items: built.decisions } });
+    // Every recorded voice is on its line, so the take check is green; but one source voice never
+    // made it into a record, and one extend was merged.
+    text(await call("lines_record", { scene: "scene-1", entries: [
+        { file: "c1.rpy", line: 10, unitId: "u-1", voiceFile: "voice/a/a(1).mp3" },
+        { file: "c1.rpy", line: 11, unitId: "u-2", voiceFile: "voice/a/a(2).mp3" },
+        { file: "c1.rpy", line: 13, unitId: "u-3" },
+    ] }));
+    const check = text(await call("voice_check"));
+    assert.match(check, /^# 2\/2 recorded voiced lines have a take\./);
+    assert.match(check, /# Against the pack's scan: say lines match the pack in 0 of 1 recorded files, 1 fewer recorded \(the game has 1 extend lines\); voice differs from the pack in 1 files\./);
+    assert.match(check, /# Voices that play during a `pause`/);
+    assert.match(check, /"code": "voice-differs"/);
+    assert.match(check, /the pack has 3 voiced say lines, 2 records carry a voice file/);
+    const status = text(await call("port_status"));
+    assert.match(status, /Against the pack's scan: .*voice differs from the pack in 1 files/);
+    assert.match(status, /script\/c1\.rpy: the pack has 3 voiced say lines, 2 records carry a voice file/);
+    // The Studio test reports the same differences as warnings and info, and still passes.
+    const findings: { severity: string; ruleId?: string; message: { text?: string } }[] = [];
+    const translator = { t: (key: string, params?: Record<string, unknown>) => `${key} ${JSON.stringify(params ?? {})}` } as never;
+    const definition = voiceLedgerTest(app, store, translator);
+    const verdict = await definition.run({ report: (finding: never) => void findings.push(finding) } as never);
+    assert.equal(verdict.status, "passed");
+    assert.match(verdict.summary!.text!, /^test\.voice\.summaryPack .*"differences":1/);
+    assert.deepEqual(findings.map(finding => `${finding.severity} ${finding.ruleId}`).sort(), [
+        "info ren2leaf-bridge/pack-lines-fewer",
+        "info ren2leaf-bridge/pack-pause-voice",
+        "warning ren2leaf-bridge/pack-voice-differs",
+    ]);
 });

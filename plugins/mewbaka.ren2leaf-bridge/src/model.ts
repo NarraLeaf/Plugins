@@ -243,6 +243,11 @@ export function markSeen(store: DecisionsStore, ids: string[]): { store: Decisio
     return { store: { version: 1, items }, marked, unknown: ids.filter(id => !known.has(id)) };
 }
 
+/** Questions the agent asked that the author has not answered yet. */
+export function openQuestionCount(store: DecisionsStore): number {
+    return store.items.filter(item => item.origin === "agent" && item.status === "open").length;
+}
+
 export function answerSummary(decision: Decision): string {
     if (!decision.answer) return "";
     const option = decision.answer.optionId ? decision.options.find(entry => entry.id === decision.answer!.optionId) : undefined;

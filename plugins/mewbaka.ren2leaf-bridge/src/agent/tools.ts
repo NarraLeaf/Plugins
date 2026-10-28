@@ -1,5 +1,5 @@
 /**
- * The tools an agent porting a Ren'Py game calls through Studio's MCP endpoint. Five read, six
+ * The tools an agent porting a Ren'Py game calls through Studio's MCP endpoint. Six read, six
  * write. Every answer opens with the notices from `collectNotices` - the only way the plugin has to
  * tell an agent something it did not ask for - and then the data.
  *
@@ -26,6 +26,7 @@ import { KIND_SPECS, QUERY_KINDS, queryInventory, speakerDecision, type QueryKin
 import { sectionWithChildren } from "../pack/readme";
 import { collectNotices, portStatus, renderAnswer, voiceSummary, type Answer } from "../status";
 import { FrozenError, type BridgeStore } from "../store";
+import { PAUSE_VOICE_NOTE, reconcileSummary, reconcileWithPack, type ReconcileFinding } from "../reconcile";
 import { ISSUE_SEVERITIES, LEDGER_AREAS, LEDGER_STATUSES } from "../types";
 import { checkVoice, type VoiceReport } from "../voice";
 
@@ -298,6 +299,7 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                 "`stale`: the scene was rewritten after its lines were recorded, so every line has a new id. Record the scene again (lines_record with replace: true, new unit ids), then link the voice.",
                 "`unlinked`: the line has no take yet; link its voice file with voice_link.",
                 "Call it after every story_apply of a voiced scene. Rewriting a scene silently detaches all its voice; this is how you find out.",
+                "It also holds the records against the pack's own scan, per source file: say lines and voiced lines the source has vs. what you recorded. That catches a line or voice you never recorded. Differences are not errors: explain each (extend lines merged, a file left out on purpose) or fix it.",
             ].join(" "),
             inputSchema: {
                 type: "object",
@@ -318,9 +320,22 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                     return refuse("not_found", `No line records for scene ${ref}.`, `Record its lines with ${tool(TOOL.linesRecord)} after writing the scene.`);
                 }
                 const report = await runVoiceCheck(app, store, scene);
+                const comments = [voiceSummary(report)];
+                let pack: ReconcileFinding[] | undefined;
+                if (store.snapshot.pack) {
+                    // Whole project, also for one scene: a source file can span several scenes.
+                    const reconciled = reconcileWithPack(store.snapshot.lines, store.snapshot.inventory?.inventory ?? null, store.snapshot.pack.chapters);
+                    comments.push(reconcileSummary(reconciled));
+                    if (reconciled.voice) comments.push(PAUSE_VOICE_NOTE);
+                    pack = reconciled.findings;
+                }
+                comments.push(`The same checks run as the Studio test ${TEST_VOICE_LEDGER}. \`problems\` are records whose voice is off its line; \`pack\` lists differences from the pack's own scan, file by file, each to be explained (warning) or noted (info).`);
                 return answer({
-                    comments: [voiceSummary(report), `The same check runs as the Studio test ${TEST_VOICE_LEDGER}.`],
-                    data: report.problems.slice(0, 400),
+                    comments,
+                    data: {
+                        problems: report.problems.slice(0, 400),
+                        ...(pack ? { pack: pack.map(finding => ({ level: finding.level, code: finding.code, ...(finding.file ? { file: finding.file } : {}), text: finding.text })) } : {}),
+                    },
                 });
             },
         },
