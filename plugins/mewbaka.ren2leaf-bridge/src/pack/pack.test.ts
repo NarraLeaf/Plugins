@@ -169,13 +169,21 @@ test("a caveat about something the game does not have stays off its answers", ()
     const plain: PackFacts = {
         inventory: {
             extensions: {
+                speakers: { summary: { voicedLines: 0 } },
                 python: {
                     entries: [{ kind: "config", target: "config.has_voice", snippet: "define config.has_voice = False" }],
                     variables: [{ name: "book" }],
+                    galleries: [],
+                    interfaceVariables: [],
                 },
                 facts: { achievements: { wrappers: [], declared: [], unlockPoints: [], granted: [] } },
-                assets: { summary: { imageDefinitions: 0 } },
-                flow: { endings: [{ name: "marry" }], labels: [{ name: "start", out: [{ kind: "jump", to: "rightaway" }] }] },
+                assets: { summary: { imageDefinitions: 0 }, missing: [] },
+                flow: {
+                    entries: ["start"],
+                    endings: [{ name: "marry" }],
+                    labels: [{ name: "start", file: "script.rpy", out: [{ kind: "jump", to: "rightaway" }] }],
+                    menus: [{ label: "start" }],
+                },
             },
         },
         chapters: { excluded: [] },
@@ -204,6 +212,51 @@ test("a caveat about something the game does not have stays off its answers", ()
     // A scan that does not say keeps every caveat, and so does a caller with no facts.
     assert.ok(caveatsForSection("8", "0.2.0", { inventory: {}, chapters: null }).some(caveat => caveat.id === "image-geometry"));
     assert.ok(caveatsForSection("8", "0.2.0").some(caveat => caveat.id === "image-geometry"));
+});
+
+test("what a port through a 0.3.0 pack found is flagged until scanner 0.4.0, for games that have it", () => {
+    // A game shaped like the one that port was: the start labels in a file the migrator excluded,
+    // voiced lines, a gallery of unlock_image groups, a menu outside every label, notify in the
+    // interface, append on an interface-only list, and a missing sprite whose tag is shown.
+    const ported: PackFacts = {
+        inventory: {
+            extensions: {
+                speakers: { summary: { voicedLines: 12 } },
+                python: {
+                    entries: [
+                        { kind: "knownApi", api: "renpy.notify", label: null, snippet: 'renpy.notify("<msg>")' },
+                        { kind: "unknownCall", callee: "pic_list.append", label: null, snippet: 'pic_list.append("<cg>")' },
+                    ],
+                    galleries: [{ button: "g1", images: [], unlocks: ["g1_a", "g1_b"] }],
+                    interfaceVariables: [{ name: "pic_list" }],
+                },
+                assets: { missing: [{ kind: "image", tag: "k1", tagShown: true, superseded: false }] },
+                flow: {
+                    entries: ["start", "splashscreen"],
+                    labels: [
+                        { name: "start", file: "boot.rpy", out: [] },
+                        { name: "ch1", file: "ch1.rpy", out: [] },
+                    ],
+                    menus: [{ label: "ch1" }, { label: null }],
+                },
+            },
+        },
+        chapters: { excluded: ["boot.rpy"] },
+    };
+    const found = [
+        ...["3", "4", "5", "7", "8"].flatMap(section => caveatsForSection(section, "0.3.0", ported)),
+        ...caveatsForKind("menu", "0.3.0", ported),
+        ...caveatsForKind("voice", "0.3.0", ported),
+    ].map(caveat => caveat.id);
+    for (const id of ["excluded-entry", "voice-off-line", "gallery-unlock-image", "menu-outside-label", "notify-in-story", "interface-list-calls", "missing-tag-shown"]) {
+        assert.ok(found.includes(id), id);
+    }
+    // A 0.4.0 pack has none of them.
+    assert.equal(["3", "4", "5", "7", "8"].flatMap(section => caveatsForSection(section, "0.4.0", ported)).length, 0);
+
+    // Excluding a file the game does not start in is not this mistake.
+    const elsewhere: PackFacts = { ...ported, chapters: { excluded: ["ch1.rpy"] } };
+    assert.ok(!caveatsForSection("5", "0.3.0", elsewhere).some(caveat => caveat.id === "excluded-entry"));
 });
 
 test("queryInventory reads the voice file of each line under auto_voice", () => {
