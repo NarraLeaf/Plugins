@@ -172,10 +172,17 @@ test("a caveat about something the game does not have stays off its answers", ()
                 python: {
                     entries: [{ kind: "config", target: "config.has_voice", snippet: "define config.has_voice = False" }],
                     variables: [{ name: "book" }],
+                    galleries: [],
+                    interfaceVariables: [],
                 },
                 facts: { achievements: { wrappers: [], declared: [], unlockPoints: [], granted: [] } },
-                assets: { summary: { imageDefinitions: 0 } },
-                flow: { endings: [{ name: "marry" }], labels: [{ name: "start", reachable: true, out: [{ kind: "jump", to: "rightaway" }] }], menus: [] },
+                assets: { summary: { imageDefinitions: 0 }, missing: [] },
+                flow: {
+                    entries: ["start"],
+                    endings: [{ name: "marry" }],
+                    labels: [{ name: "start", file: "script.rpy", reachable: true, out: [{ kind: "jump", to: "rightaway" }] }],
+                    menus: [{ label: "start" }],
+                },
                 speakers: { summary: { voicedLines: 0 }, voiceDirs: [] },
             },
         },
@@ -224,78 +231,78 @@ test("each caveat holds for the scanner versions it names, and open ones stay on
         .filter((id, index, all) => all.indexOf(id) === index);
 
     // Fixed in 0.3.0: on for a 0.2.0 pack only.
-    const fixed = ["achievement-location", "auto-voice", "chapter-terms", "defines-as-variables", "excluded-reachable", "gallery-unknown", "image-geometry"];
-    // Still in 0.3.0, or new in it, and not fixed by any Ren2Leaf yet.
-    const open = ["excluded-entry-labels", "gallery-unlock-image", "interface-name-calls", "menus-unreachable", "notify-blueprint", "screens-one-state", "voice-before-pause"];
+    const fixed030 = ["achievement-location", "auto-voice", "chapter-terms", "defines-as-variables", "excluded-reachable", "gallery-unknown", "image-geometry"];
+    // What a port through a 0.3.0 pack found, fixed in 0.4.0: on through 0.3.0.
+    const fixed040 = ["excluded-entry", "gallery-unlock-image", "interface-list-calls", "menu-outside-label", "missing-tag-shown", "notify-in-story", "voice-off-line"];
+    // Not fixed by any Ren2Leaf yet.
+    const open = ["screens-one-state"];
 
     const v020 = everywhere("0.2.0");
-    for (const id of [...fixed, ...open]) assert.ok(v020.includes(id), `0.2.0 has ${id}`);
+    for (const id of [...fixed030, ...fixed040, ...open]) assert.ok(v020.includes(id), `0.2.0 has ${id}`);
     assert.ok(!v020.includes("image-geometry-partial"), "the 0.3.0 geometry table does not exist in 0.2.0");
 
     const v030 = everywhere("0.3.0");
-    for (const id of fixed) assert.ok(!v030.includes(id), `0.3.0 fixed ${id}`);
-    for (const id of [...open, "image-geometry-partial"]) assert.ok(v030.includes(id), `0.3.0 has ${id}`);
+    for (const id of fixed030) assert.ok(!v030.includes(id), `0.3.0 fixed ${id}`);
+    for (const id of [...fixed040, ...open, "image-geometry-partial"]) assert.ok(v030.includes(id), `0.3.0 has ${id}`);
 
-    // A scanner newer than this list: what nobody has fixed stays on.
-    assert.deepEqual(everywhere("0.4.1"), v030);
-    assert.equal(caveatsForSection("6", "0.4.1")[0]!.id, "screens-one-state");
+    // 0.4.0 and anything newer: only what nobody has fixed stays on.
+    assert.deepEqual(everywhere("0.4.0"), ["image-geometry-partial", "screens-one-state"]);
+    assert.deepEqual(everywhere("0.5.1"), everywhere("0.4.0"));
+    assert.equal(caveatsForSection("6", "0.5.1")[0]!.id, "screens-one-state");
 });
 
-test("the 0.3.0 caveats look for what they are about in the scan", () => {
-    const has = (facts: PackFacts, kind: Parameters<typeof caveatsForKind>[0], id: string) =>
-        caveatsForKind(kind, "0.3.0", facts).some(caveat => caveat.id === id);
-    const inventory = (extensions: Record<string, unknown>) => ({ extensions });
+test("what a port through a 0.3.0 pack found is flagged until scanner 0.4.0, for games that have it", () => {
+    // A game shaped like the one that port was: the start labels in a file the migrator excluded,
+    // voiced lines, a gallery of unlock_image groups, a menu outside every label, notify in the
+    // interface, append on an interface-only list, and a missing sprite whose tag is shown.
+    const ported: PackFacts = {
+        inventory: {
+            extensions: {
+                speakers: { summary: { voicedLines: 12 } },
+                python: {
+                    entries: [
+                        { kind: "knownApi", api: "renpy.notify", label: null, snippet: 'renpy.notify("<msg>")' },
+                        { kind: "unknownCall", callee: "pic_list.append", label: null, snippet: 'pic_list.append("<cg>")' },
+                    ],
+                    galleries: [{ button: "g1", images: [], unlocks: ["g1_a", "g1_b"] }],
+                    interfaceVariables: [{ name: "pic_list" }],
+                },
+                assets: { missing: [{ kind: "image", tag: "k1", tagShown: true, superseded: false }] },
+                flow: {
+                    entries: ["start", "splashscreen"],
+                    labels: [
+                        { name: "start", file: "boot.rpy", out: [] },
+                        { name: "ch1", file: "ch1.rpy", out: [] },
+                    ],
+                    menus: [{ label: "ch1" }, { label: null }],
+                },
+            },
+        },
+        chapters: { excluded: ["boot.rpy"] },
+    };
+    const found = [
+        ...["3", "4", "5", "7", "8"].flatMap(section => caveatsForSection(section, "0.3.0", ported)),
+        ...caveatsForKind("menu", "0.3.0", ported),
+        ...caveatsForKind("voice", "0.3.0", ported),
+    ].map(caveat => caveat.id);
+    for (const id of ["excluded-entry", "voice-off-line", "gallery-unlock-image", "menu-outside-label", "notify-in-story", "interface-list-calls", "missing-tag-shown"]) {
+        assert.ok(found.includes(id), id);
+    }
+    // A 0.4.0 pack has none of them.
+    const fixed = new Set(["excluded-entry", "voice-off-line", "gallery-unlock-image", "menu-outside-label", "notify-in-story", "interface-list-calls", "missing-tag-shown"]);
+    assert.ok(!["3", "4", "5", "7", "8"].flatMap(section => caveatsForSection(section, "0.4.0", ported)).some(caveat => fixed.has(caveat.id)));
 
-    // An excluded file that holds `start` (or splashscreen…) is run by the game whatever the table says.
-    const files = { flow: { files: [
-        { file: "script.rpy", says: 0, labels: [{ name: "splashscreen" }, { name: "start" }] },
-        { file: "debug.rpy", says: 4, labels: [{ name: "test_box" }] },
-    ] } };
-    assert.ok(has({ inventory: inventory(files), chapters: { excluded: ["script.rpy"] } }, "file", "excluded-entry-labels"));
-    assert.ok(!has({ inventory: inventory(files), chapters: { excluded: ["debug.rpy"] } }, "file", "excluded-entry-labels"));
-    assert.ok(!has({ inventory: inventory(files), chapters: { excluded: [] } }, "file", "excluded-entry-labels"));
-    assert.ok(has({ inventory: inventory(files), chapters: null }, "file", "excluded-entry-labels"), "a pack that does not say keeps it");
+    // Excluding a file the game does not start in is not this mistake.
+    const elsewhere: PackFacts = { ...ported, chapters: { excluded: ["ch1.rpy"] } };
+    assert.ok(!caveatsForSection("5", "0.3.0", elsewhere).some(caveat => caveat.id === "excluded-entry"));
+});
 
-    // `unlock_image` is a picture the catalogue does not count.
-    const gallery = (images: string[], unlocks: string[]) => inventory({ python: {
-        entries: [{ callee: "g.button", snippet: 'g.button("one")' }],
-        galleries: [{ gallery: "g", button: "one", images, unlocks, conditions: [] }],
-    } });
-    assert.ok(has({ inventory: gallery([], ["cg_one"]), chapters: null }, "gallery", "gallery-unlock-image"));
-    assert.ok(!has({ inventory: gallery(["cg_one"], []), chapters: null }, "gallery", "gallery-unlock-image"));
-
-    // A menu outside any label, or in one the game cannot reach.
-    const menus = (label: string | null, reachable: boolean) => inventory({ flow: {
-        labels: [{ name: "start", reachable: true }, { name: "test", reachable }],
-        unreachable: reachable ? [] : [{ name: "test" }],
-        menus: [{ file: "c1.rpy", line: 10, label: "start", choices: [] }, { file: "c1.rpy", line: 90, label, choices: [] }],
-    } });
-    assert.ok(has({ inventory: menus(null, true), chapters: null }, "menu", "menus-unreachable"));
-    assert.ok(has({ inventory: menus("test", false), chapters: null }, "menu", "menus-unreachable"));
-    assert.ok(!has({ inventory: menus("test", true), chapters: null }, "menu", "menus-unreachable"));
-
-    // renpy.notify, by the API table or by an entry.
-    assert.ok(has({ inventory: inventory({ python: { entries: [], apiUsage: [{ api: "renpy.notify", count: 2 }] } }), chapters: null }, "python", "notify-blueprint"));
-    assert.ok(!has({ inventory: inventory({ python: { entries: [], apiUsage: [{ api: "renpy.pause", count: 2 }] } }), chapters: null }, "python", "notify-blueprint"));
-
-    // Method calls on a name only the interface uses.
-    const iface = (callee: string) => inventory({ python: {
-        entries: [{ kind: "unknownCall", callee, snippet: `${callee}("x")` }],
-        interfaceVariables: [{ name: "cg_rows" }],
-    } });
-    assert.ok(has({ inventory: iface("cg_rows.append"), chapters: null }, "python", "interface-name-calls"));
-    assert.ok(!has({ inventory: iface("other.append"), chapters: null }, "python", "interface-name-calls"));
-
-    // Voice that a pause takes: only for a game with voice.
-    const voice = (voicedLines: number) => inventory({ speakers: { summary: { voicedLines }, voiceDirs: [] } });
-    assert.ok(has({ inventory: voice(12), chapters: null }, "speaker", "voice-before-pause"));
-    assert.ok(!has({ inventory: voice(0), chapters: null }, "speaker", "voice-before-pause"));
-
-    // The 0.3.0 geometry table: on when it lists something, or when the game has an attribute hook.
-    const geometry = (rows: object[], hooks: object[]) => inventory({ assets: { geometry: rows, autoGroups: [] }, python: { entries: [], hooks } });
-    assert.ok(has({ inventory: geometry([{ name: "a" }], []), chapters: null }, "asset", "image-geometry-partial"));
-    assert.ok(has({ inventory: geometry([], [{ hook: "config.adjust_attributes" }]), chapters: null }, "asset", "image-geometry-partial"));
-    assert.ok(!has({ inventory: geometry([], []), chapters: null }, "asset", "image-geometry-partial"));
+test("the 0.3.0 geometry table is flagged when it lists something, or when the game has an attribute hook", () => {
+    const has = (facts: PackFacts) => caveatsForKind("asset", "0.3.0", facts).some(caveat => caveat.id === "image-geometry-partial");
+    const geometry = (rows: object[], hooks: object[]): PackFacts => ({ inventory: { extensions: { assets: { geometry: rows, autoGroups: [] }, python: { entries: [], hooks } } }, chapters: null });
+    assert.ok(has(geometry([{ name: "a" }], [])));
+    assert.ok(has(geometry([], [{ hook: "config.adjust_attributes" }])));
+    assert.ok(!has(geometry([], [])));
 });
 
 test("buildPack keeps an ImageButton's other states and reads the 0.3.0 split", () => {

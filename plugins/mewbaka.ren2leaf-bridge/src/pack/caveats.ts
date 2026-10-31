@@ -64,12 +64,6 @@ function pythonEntries(facts: PackFacts): Record<string, unknown>[] | undefined 
 
 const TITLE_LABELS = new Set(["splashscreen", "main_menu", "_main_menu", "before_main_menu"]);
 
-/** Labels Ren'Py enters by itself (Ren2Leaf's `ENGINE_LABELS`): no jump in the script leads to them. */
-const ENGINE_LABELS = new Set([
-    "start", "splashscreen", "before_main_menu", "main_menu", "after_load", "after_warp",
-    "quit", "hide_windows", "_start", "_main_menu", "_quit", "autosave", "replay",
-]);
-
 /** The files the migrator excluded; `undefined` when the pack does not say. */
 function excludedFiles(facts: PackFacts): string[] | undefined {
     const excluded = at(facts.chapters, "excluded");
@@ -91,22 +85,6 @@ export const CAVEATS: Caveat[] = [
             return endings.length === 0
                 || (excluded !== undefined && excluded.length > 0)
                 || labels.some(label => Array.isArray(label.out) && label.out.some(edge => isRecord(edge) && TITLE_LABELS.has(String(edge.to))));
-        },
-    },
-    {
-        id: "excluded-entry-labels",
-        sections: ["5"],
-        kinds: ["file", "label"],
-        text: "The excluded-files table counts only jumps and calls from other files as a way in. A file holding `start` or a label the engine enters by itself (`splashscreen`, `before_main_menu`, `main_menu`, `after_load`…) shows — there although the game runs it. Check every excluded file for those labels (pack_query kind label, file <path>) and port what they do.",
-        applies: facts => {
-            const excluded = excludedFiles(facts);
-            if (excluded === undefined) return true;
-            if (excluded.length === 0) return false;
-            const files = rows(facts.inventory, "extensions", "flow", "files");
-            if (!files) return true;
-            return files.some(row => excluded.includes(String(row.file))
-                && Array.isArray(row.labels)
-                && row.labels.some(label => isRecord(label) && ENGINE_LABELS.has(String(label.name))));
         },
     },
     {
@@ -137,18 +115,6 @@ export const CAVEATS: Caveat[] = [
         applies: facts => {
             const entries = pythonEntries(facts);
             return !entries || entries.some(entry => entry.target === "config.auto_voice" || entry.variable === "config.auto_voice");
-        },
-    },
-    {
-        id: "voice-before-pause",
-        sections: ["3", "7"],
-        kinds: ["speaker", "voice"],
-        text: "A `voice` statement followed by a `pause` or a `menu` before any say line plays during that pause or menu. The scan drops such voices: they are in no voiced-line count, speaker voice range or voice row. Search the source for `voice` lines whose next statement is `pause` or `menu`, and port each one where it plays.",
-        applies: facts => {
-            const voiced = count(facts.inventory, "extensions", "speakers", "summary", "voicedLines");
-            const dirs = rows(facts.inventory, "extensions", "speakers", "voiceDirs");
-            if (voiced === undefined && dirs === undefined) return true;
-            return (voiced ?? 0) > 0 || (dirs ?? []).length > 0;
         },
     },
     {
@@ -192,49 +158,6 @@ export const CAVEATS: Caveat[] = [
         },
     },
     {
-        id: "gallery-unlock-image",
-        sections: ["4"],
-        kinds: ["gallery", "python"],
-        text: "The gallery catalogue counts only `.image(…)` calls as pictures. `.unlock_image(\"x\")` is Ren'Py shorthand for `.image(\"x\")` plus `.unlock(\"x\")`, and the scan lists it under unlocks only, so a button can show 0 pictures. Count its unlock_image calls as pictures too.",
-        applies: facts => {
-            const galleries = rows(facts.inventory, "extensions", "python", "galleries");
-            const entries = pythonEntries(facts);
-            if (!galleries && !entries) return true;
-            return (entries ?? []).some(entry => /\.unlock_image\b/.test(`${String(entry.callee ?? "")} ${String(entry.snippet ?? "")}`))
-                || (galleries ?? []).some(group => Array.isArray(group.images) && group.images.length === 0 && Array.isArray(group.unlocks) && group.unlocks.length > 0);
-        },
-    },
-    {
-        id: "notify-blueprint",
-        sections: ["4"],
-        kinds: ["python"],
-        text: "`renpy.notify` is mapped to a `/blueprint` row running Post Notification. That node needs the running game's interface, which a story row's blueprint does not have, so it fails there. Have the row set a persistent variable instead, and post the notification from a global blueprint on its `persistentVariableChanged` event.",
-        applies: facts => {
-            const usage = rows(facts.inventory, "extensions", "python", "apiUsage");
-            const entries = pythonEntries(facts);
-            if (!usage && !entries) return true;
-            return (usage ?? []).some(row => row.api === "renpy.notify")
-                || (entries ?? []).some(entry => entry.api === "renpy.notify" || /(?:^|[^\w.])renpy\.notify\s*\(/.test(String(entry.snippet ?? "")));
-        },
-    },
-    {
-        id: "interface-name-calls",
-        sections: ["4"],
-        kinds: ["python", "variable"],
-        text: "A name listed as used only by the interface can still have its method calls (`.append(…)` and the like) listed as 'origin unknown' with a /blueprint suggestion. They fill interface data at init, such as the list a gallery screen reads: port them with the screen that reads the name, not as story rows.",
-        applies: facts => {
-            const names = rows(facts.inventory, "extensions", "python", "interfaceVariables");
-            const entries = pythonEntries(facts);
-            if (!names) return entries === undefined;
-            const set = new Set(names.map(row => String(row.name)));
-            return (entries ?? []).some(entry => {
-                const callee = String(entry.callee ?? "");
-                const dot = callee.indexOf(".");
-                return dot > 0 && set.has(callee.slice(0, dot));
-            });
-        },
-    },
-    {
         id: "defines-as-variables",
         sections: ["4"],
         kinds: ["variable"],
@@ -246,24 +169,96 @@ export const CAVEATS: Caveat[] = [
         },
     },
     {
-        id: "menus-unreachable",
-        sections: ["5"],
-        kinds: ["menu"],
-        text: "Menu and choice counts, and the menu table, include every `menu` in the source: ones in unreachable labels and test menus outside any label (label null) are counted and not marked. Check that a menu's label is reachable (pack_query kind label) before porting it.",
-        applies: facts => {
-            const menus = rows(facts.inventory, "extensions", "flow", "menus");
-            const labels = rows(facts.inventory, "extensions", "flow", "labels");
-            if (!menus || !labels) return true;
-            const unreachable = new Set(labels.filter(label => label.reachable === false).map(label => String(label.name)));
-            for (const row of rows(facts.inventory, "extensions", "flow", "unreachable") ?? []) unreachable.add(String(row.name));
-            return menus.some(menu => menu.label === null || menu.label === undefined || unreachable.has(String(menu.label)));
-        },
-    },
-    {
         id: "screens-one-state",
         sections: ["6"],
         kinds: ["screen"],
         text: "Each screen was captured in one state. A screen that changes with persistent data (a main menu before and after completion) has a second look the pack does not show. An ImageButton's hover and selected images are in its `states` when the capture recorded them; otherwise read them from screens.rpy.",
+    },
+    {
+        id: "excluded-entry",
+        sections: ["5"],
+        kinds: ["file", "label"],
+        throughScanner: "0.3.0",
+        text: "Excluding a file does not warn when the game starts in it. A file with no lines can still hold `start`, `splashscreen` or `before_main_menu`, the engine's entry points, and the labels a screen action jumps to. Check `flow.entries` against the excluded files: a route's first jump lives there, and it has to come over with the rest.",
+        applies: facts => {
+            const excluded = excludedFiles(facts);
+            if (excluded && excluded.length === 0) return false;
+            const entries = at(facts.inventory, "extensions", "flow", "entries");
+            const labels = rows(facts.inventory, "extensions", "flow", "labels");
+            if (!excluded || !Array.isArray(entries) || !labels) return true;
+            const names = new Set(entries.map(String));
+            return labels.some(label => names.has(String(label.name)) && excluded.includes(String(label.file)));
+        },
+    },
+    {
+        id: "voice-off-line",
+        sections: ["3", "7"],
+        kinds: ["speaker", "voice"],
+        throughScanner: "0.3.0",
+        text: "A `voice` statement plays at the next interaction, and `pause` and `menu` are interactions as well as say lines. The pack only ties a voice to the say line after it, so a voice followed by a pause or a menu first is missing, and one followed by another `voice` first never plays. Look at what comes after each `voice` before mapping it.",
+        applies: facts => {
+            const voiced = at(facts.inventory, "extensions", "speakers", "summary", "voicedLines");
+            return typeof voiced !== "number" || voiced > 0;
+        },
+    },
+    {
+        id: "gallery-unlock-image",
+        sections: ["4"],
+        kinds: ["gallery", "python"],
+        throughScanner: "0.3.0",
+        text: "`Gallery.unlock_image(x)` adds the image x and its unlock condition at once, but the pack counted it as an unlock only, so a gallery built from it shows groups of 0 images. The images are the names in each group's `unlocks`.",
+        applies: facts => {
+            const galleries = rows(facts.inventory, "extensions", "python", "galleries");
+            return !galleries || galleries.some(group => !Array.isArray(group.images) || group.images.length === 0);
+        },
+    },
+    {
+        id: "menu-outside-label",
+        sections: ["5"],
+        kinds: ["menu"],
+        throughScanner: "0.3.0",
+        text: "A `menu` written at the top level of a file, outside every label, can never be reached, yet the pack counts it and its choices with the rest. Leave menus with no label out of the port and out of any count.",
+        applies: facts => {
+            const menus = rows(facts.inventory, "extensions", "flow", "menus");
+            return !menus || menus.some(menu => !menu.label);
+        },
+    },
+    {
+        id: "notify-in-story",
+        sections: ["4"],
+        kinds: ["python"],
+        throughScanner: "0.3.0",
+        text: "`renpy.notify` is mapped to Post Notification, a Game node that interface blueprints (widget, page, global) accept and story row blueprints refuse. In screen and interface code it maps as written. In a label there is no story equivalent: write a /note row and ask the author, rather than inventing a replacement.",
+        applies: facts => {
+            const entries = pythonEntries(facts);
+            return !entries || entries.some(entry => entry.api === "renpy.notify");
+        },
+    },
+    {
+        id: "interface-list-calls",
+        sections: ["4"],
+        kinds: ["python", "variable"],
+        throughScanner: "0.3.0",
+        text: "Calls on a name only interfaces use, such as `append` on a list a screen shows, outside every label, are listed among the calls of unknown origin although the same name is filed as interface-only. The script never reads or writes them: they belong with the screen that uses the name, not in a story blueprint.",
+        applies: facts => {
+            const names = rows(facts.inventory, "extensions", "python", "interfaceVariables");
+            const entries = pythonEntries(facts);
+            if (!names || !entries) return true;
+            const interfaceOnly = new Set(names.map(row => String(row.name)));
+            return entries.some(entry => entry.kind === "unknownCall" && !entry.label
+                && interfaceOnly.has(String(entry.callee ?? "").split(".")[0]!) && String(entry.callee ?? "").includes("."));
+        },
+    },
+    {
+        id: "missing-tag-shown",
+        sections: ["8"],
+        kinds: ["asset"],
+        throughScanner: "0.3.0",
+        text: "For a missing image file, 'tag shown' only says some line shows that tag, not that any line reaches this definition. A definition is shown when a line's attributes, merged with the tag's current ones, are all in its name, and a bare `show tag at ...` keeps the current image. Check the attributes the script uses before treating a missing file as one the game displays.",
+        applies: facts => {
+            const missing = rows(facts.inventory, "extensions", "assets", "missing");
+            return !missing || missing.some(row => row.kind === "image" && row.tagShown === true && row.superseded !== true);
+        },
     },
 ];
 
