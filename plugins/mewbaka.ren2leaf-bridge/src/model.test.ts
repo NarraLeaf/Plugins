@@ -6,6 +6,8 @@ import {
     answerDecision,
     askDecision,
     markSeen,
+    openQuestionCount,
+    recordConversationAnswer,
     recordLines,
     rejectLedgerItem,
     RuleError,
@@ -81,6 +83,26 @@ test("decisions: ask, deduplicate, answer, mark seen, withdraw", () => {
     const second = askDecision(seen.store, { question: "Another?" }, NOW);
     assert.equal(second.decision.id, "d-2");
     assert.equal(withdrawDecision(second.store, "d-2").items[1]!.status, "withdrawn");
+});
+
+test("an answer the author gave in conversation is recorded with their words, and only on an open question", () => {
+    const state = emptyState();
+    const asked = askDecision(state.decisions, { question: "Run the original to check the name plate?", options: [{ label: "Run it" }, { label: "Keep as is" }] }, NOW);
+    assert.equal(openQuestionCount(asked.store), 1);
+    assert.throws(() => recordConversationAnswer(asked.store, "d-1", { optionId: "a" }, NOW), /Quote the author's own words/);
+    assert.throws(() => recordConversationAnswer(asked.store, "d-1", { quote: "yes", optionId: "z" }, NOW), /Option z/);
+    assert.throws(() => recordConversationAnswer(asked.store, "d-9", { quote: "yes" }, NOW), /No decision d-9/);
+    const recorded = recordConversationAnswer(asked.store, "d-1", { quote: "Go ahead, copy it first", optionId: "a" }, NOW);
+    const decision = recorded.items[0]!;
+    assert.equal(decision.status, "answered");
+    assert.equal(decision.seenByAgent, true);
+    assert.deepEqual(decision.answer, { at: NOW, via: "conversation", quote: "Go ahead, copy it first", optionId: "a" });
+    assert.equal(openQuestionCount(recorded), 0);
+    // An answer is the author's: the agent cannot overwrite one, from the panel or from a conversation.
+    assert.throws(() => recordConversationAnswer(recorded, "d-1", { quote: "no" }, NOW), /already answered/);
+    const inPanel = answerDecision(asked.store, "d-1", { optionId: "b" }, NOW);
+    assert.throws(() => recordConversationAnswer(inPanel, "d-1", { quote: "yes" }, NOW), /Only the author changes an answer/);
+    assert.throws(() => recordConversationAnswer(withdrawDecision(asked.store, "d-1"), "d-1", { quote: "yes" }, NOW), /withdrawn/);
 });
 
 test("issues and log notes", () => {
