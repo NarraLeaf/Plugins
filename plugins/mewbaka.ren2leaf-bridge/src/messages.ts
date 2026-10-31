@@ -112,6 +112,10 @@ const en: Record<string, string> = {
     "test.pack.voice-differs": "{file}: {pack} voiced lines in the pack, {recorded} records carry a voice file",
     "test.pack.voiced-unplaced": "{count} voiced lines in the pack (narration, one-off speakers) are not counted per file",
     "test.pack.pauseVoice": "Voices that play during a pause or a menu are in neither count; check them in the source",
+    "test.pack.voice-missing": "{where}: {audio} plays on the line after it, but no record carries it",
+    "test.pack.voice-on-line": "{where}: {audio} plays during a {kind} in the original, but is recorded on a line",
+    "test.pack.voice-off-line": "{where}: {audio} plays during a {kind}, not on a line; check the port plays it there",
+    "test.pack.voice-never-plays": "{where}: {audio} never plays in the original, but is recorded on a line",
 };
 
 const zh: Record<string, string> = {
@@ -226,6 +230,10 @@ const zh: Record<string, string> = {
     "test.pack.voice-differs": "{file}：补充包中带配音的台词 {pack} 句，登记中带配音文件的 {recorded} 句",
     "test.pack.voiced-unplaced": "补充包中有 {count} 句带配音的台词（旁白、一次性说话人）未按文件计数",
     "test.pack.pauseVoice": "在 pause 或菜单期间播放的配音不计入任何一方，需对照源码检查",
+    "test.pack.voice-missing": "{where}：{audio} 在其后的台词上播放，但没有任何登记带它",
+    "test.pack.voice-on-line": "{where}：{audio} 在原作中于 {kind} 期间播放，却被登记在台词上",
+    "test.pack.voice-off-line": "{where}：{audio} 在 {kind} 期间播放而非在台词上，需确认移植版在该处播放",
+    "test.pack.voice-never-plays": "{where}：{audio} 在原作中从不播放，却被登记在台词上",
 };
 
 export const MESSAGES = { messages: { en, zh }, fallbackLocale: "en" };

@@ -128,7 +128,7 @@ export function portStatus(state: BridgeState, voice: VoiceReport | null): strin
         const warnings = report.findings.filter(finding => finding.level === "warning");
         for (const finding of warnings.slice(0, RECONCILE_LIMIT)) lines.push(`  ${finding.text}`);
         if (warnings.length > RECONCILE_LIMIT) lines.push(`  ${warnings.length - RECONCILE_LIMIT} more; ${tool(TOOL.voiceCheck)} lists every difference.`);
-        if (report.voice) lines.push(`  ${PAUSE_VOICE_NOTE}`);
+        if (report.voice && !report.statements) lines.push(`  ${PAUSE_VOICE_NOTE}`);
     }
 
     const recent = state.log.entries.slice(-10);

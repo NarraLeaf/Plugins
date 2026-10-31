@@ -38,7 +38,15 @@ export type ReconcileCode =
     /** Records with a voice file differ from the pack's voiced say lines in a file. */
     | "voice-differs"
     /** Voiced lines the pack counts but does not place in a file (narration, one-off speakers). */
-    | "voiced-unplaced";
+    | "voiced-unplaced"
+    /** Scanner 0.4.0+: a voice that plays on a say line is on no record. */
+    | "voice-missing"
+    /** Scanner 0.4.0+: a voice that plays at a pause or a menu is recorded on a line. */
+    | "voice-on-line"
+    /** Scanner 0.4.0+: a voice that plays at a pause or a menu; the port has to play it there. */
+    | "voice-off-line"
+    /** Scanner 0.4.0+: a voice the original never plays (the next one replaces it) is recorded on a line. */
+    | "voice-never-plays";
 
 export type ReconcileFinding = {
     level: ReconcileLevel;
@@ -70,6 +78,11 @@ export type Reconciliation = {
     lines: boolean;
     /** Whether the pack had per-file voice counts to compare with. */
     voice: boolean;
+    /**
+     * Whether the pack lists every `voice` statement with where it plays (scanner 0.4.0+). With it
+     * each voice is checked by itself and the pause/menu gap below is closed.
+     */
+    statements: boolean;
     /** The game's `extend` lines, the usual reason for fewer records; `null` when the pack does not say. */
     extendLines: number | null;
     /** Sum of (pack - recorded) over the files with fewer records. */
@@ -80,8 +93,13 @@ export type Reconciliation = {
     findings: ReconcileFinding[];
 };
 
-/** Said with every voice comparison: the gap neither side can see. */
-export const PAUSE_VOICE_NOTE = "Voices that play during a `pause` or a `menu` rather than on a say line are in neither count until Ren2Leaf exports them; check those in the source.";
+/** Said with a voice comparison from a pack before scanner 0.4.0: the gap neither side can see. */
+export const PAUSE_VOICE_NOTE = "Voices that play during a `pause` or a `menu` rather than on a say line are in neither count in packs before Ren2Leaf 0.4.0; check those in the source.";
+
+/** A voice file as the pack and the records may write it: game/ and audio/ dropped, any case. */
+function voiceKey(path: string): string {
+    return path.trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/^game\//, "").replace(/^audio\//, "").toLowerCase();
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -309,7 +327,38 @@ export function reconcileWithPack(lines: LinesStore, inventory: Record<string, u
         }
     }
 
-    return { lines: hasLines, voice: hasVoice, extendLines, shortfall, surplus, files, findings };
+    // Scanner 0.4.0 lists each `voice` statement and where it plays. A voice is found by its file:
+    // the records keep the voice file each line carries, not the line of the `voice` statement.
+    const statements = list(at(inventory, "extensions", "facts", "voices", "all"));
+    if (statements) {
+        const recordedVoices = new Set<string>();
+        for (const scene of Object.values(lines.scenes)) {
+            for (const record of scene.lines) if (record.voiceFile) recordedVoices.add(voiceKey(record.voiceFile));
+        }
+        for (const statement of statements) {
+            if (typeof statement.audio !== "string" || typeof statement.file !== "string") continue;
+            const where = `${normalizeScriptPath(statement.file)}:${num(statement.line) ?? "?"}`;
+            const audio = statement.audio;
+            const kind = isRecord(statement.playsAt) && typeof statement.playsAt.kind === "string" ? statement.playsAt.kind : "none";
+            const recorded = recordedVoices.has(voiceKey(audio));
+            const params = { where, audio, kind };
+            if (kind === "say") {
+                if (!recorded) findings.push({ level: "warning", code: "voice-missing", params,
+                    text: `${where}: ${audio} plays on the say line after it, but no record carries it. The voice was dropped, or its line was not recorded.` });
+            } else if (kind === "pause" || kind === "menu") {
+                findings.push(recorded
+                    ? { level: "warning", code: "voice-on-line", params,
+                        text: `${where}: ${audio} plays during a ${kind} in the original, not on a line, yet a record carries it: it now plays later, on whatever line it was attached to. Play it where the ${kind} is instead.` }
+                    : { level: "info", code: "voice-off-line", params,
+                        text: `${where}: ${audio} plays during a ${kind}, not on a line. The records cannot show it: check the port plays it there.` });
+            } else if (recorded) {
+                findings.push({ level: "warning", code: "voice-never-plays", params,
+                    text: `${where}: ${audio} never plays in the original (${kind === "replaced" ? "the next voice replaces it before anything shows" : "nothing follows it"}), yet a record carries it.` });
+            }
+        }
+    }
+
+    return { lines: hasLines, voice: hasVoice, statements: Boolean(statements), extendLines, shortfall, surplus, files, findings };
 }
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;

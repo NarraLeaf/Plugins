@@ -53,7 +53,11 @@ Tool names below are as your client lists them (`mewbaka_ren2leaf_bridge__<tool>
   difference is not an error, but each needs a reason: an `extend` merged into the line before
   is -1, a merge split back into two rows +1, a file the migrator excluded or the game cannot
   reach may be left out on purpose (log why). Anything else is a lost, doubled or misplaced line.
-  Voices that play during a `pause` or a `menu` are in neither count: find them in the source.
+  A pack from Ren2Leaf 0.4.0 on also lists every `voice` statement with where it plays, and each
+  is checked by itself: a voice for a say line that no record carries, one that plays during a
+  `pause` or a `menu` (play it there, not on the next line), one the original never plays. In
+  older packs voices that play during a pause or a menu are in neither count: find them in the
+  source.
 - A question only the author can answer: `decision_ask` with options and a recommendation. If
   the author is in your conversation, ask them there as well - the panel keeps the question and
   its answer across sessions, it does not replace asking. When they answer you there, record it:

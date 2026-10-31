@@ -114,3 +114,30 @@ test("a recorded path that is the tail of two pack files is not guessed", () => 
     const report = reconcileWithPack(lines(records("c1.rpy", 1, 1)), twoNames, null);
     assert.ok(report.findings.some(finding => finding.code === "file-not-in-pack" && finding.file === "c1.rpy"));
 });
+
+test("with scanner 0.4.0's voice list, each voice is checked by where it plays", () => {
+    const inv = inventory() as { extensions: Record<string, unknown> };
+    inv.extensions.facts = { voices: { total: 4, all: [
+        { file: "script/c1.rpy", line: 3, audio: "voice/a/a(1).mp3", playsAt: { kind: "say", line: 4 } },
+        { file: "script/c1.rpy", line: 7, audio: "voice/a/a(2).mp3", playsAt: { kind: "say", line: 8 } },
+        { file: "script/c2.rpy", line: 20, audio: "voice/a/a(3).mp3", playsAt: { kind: "pause", line: 21 } },
+        { file: "script/c2.rpy", line: 30, audio: "voice/a/a(4).mp3", playsAt: { kind: "pause", line: 31 } },
+        { file: "script/c2.rpy", line: 40, audio: "voice/a/a(5).mp3", playsAt: { kind: "replaced", line: 41 } },
+    ] } };
+    // The port kept a(1), dropped a(2), left a(3) for the pause, and hung a(4) on the next line.
+    const store = lines([
+        { file: "script/c1.rpy", line: 4, unitId: "u1", voiceFile: "audio/voice/a/A(1).mp3" },
+        { file: "script/c2.rpy", line: 32, unitId: "u2", voiceFile: "voice/a/a(4).mp3" },
+    ]);
+    const report = reconcileWithPack(store, inv, null);
+    assert.equal(report.statements, true);
+    const by = (code: string) => report.findings.filter(finding => finding.code === code).map(finding => finding.params.audio);
+    assert.deepEqual(by("voice-missing"), ["voice/a/a(2).mp3"]);
+    assert.deepEqual(by("voice-off-line"), ["voice/a/a(3).mp3"]);
+    assert.deepEqual(by("voice-on-line"), ["voice/a/a(4).mp3"]);
+    assert.deepEqual(by("voice-never-plays"), [], "a replaced voice nobody recorded is nothing to port");
+    assert.equal(report.findings.find(finding => finding.code === "voice-on-line")!.level, "warning");
+
+    // A 0.3.0 pack has no voice list: nothing is checked voice by voice.
+    assert.equal(reconcileWithPack(store, inventory(), null).statements, false);
+});

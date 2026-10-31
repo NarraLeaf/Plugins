@@ -77,7 +77,7 @@ export function voiceLedgerTest(app: PluginApp, store: BridgeStore, t: PluginTra
                     if (item.level === "warning") differences++;
                     ctx.report(reconcileFinding(item));
                 }
-                if (reconciled.voice) {
+                if (reconciled.voice && !reconciled.statements) {
                     ctx.report({ severity: "info", ruleId: "ren2leaf-bridge/pack-pause-voice", message: { text: t.t("test.pack.pauseVoice") }, englishMessage: PAUSE_VOICE_NOTE });
                 }
             }

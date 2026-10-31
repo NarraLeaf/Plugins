@@ -301,7 +301,7 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                 "`stale`: the scene was rewritten after its lines were recorded, so every line has a new id. Record the scene again (lines_record with replace: true, new unit ids), then link the voice.",
                 "`unlinked`: the line has no take yet; link its voice file with voice_link.",
                 "Call it after every story_apply of a voiced scene. Rewriting a scene silently detaches all its voice; this is how you find out.",
-                "It also holds the records against the pack's own scan, per source file: say lines and voiced lines the source has vs. what you recorded. That catches a line or voice you never recorded. Differences are not errors: explain each (extend lines merged, a file left out on purpose) or fix it.",
+                "It also holds the records against the pack's own scan, per source file: say lines and voiced lines the source has vs. what you recorded. That catches a line or voice you never recorded. With a pack from Ren2Leaf 0.4.0 on, each voice statement is also checked by where it plays (a say line, or a pause or menu it must play at). Differences are not errors: explain each (extend lines merged, a file left out on purpose) or fix it.",
             ].join(" "),
             inputSchema: {
                 type: "object",
@@ -328,7 +328,7 @@ export function createTools(app: PluginApp, store: BridgeStore): PluginAgentTool
                     // Whole project, also for one scene: a source file can span several scenes.
                     const reconciled = reconcileWithPack(store.snapshot.lines, store.snapshot.inventory?.inventory ?? null, store.snapshot.pack.chapters);
                     comments.push(reconcileSummary(reconciled));
-                    if (reconciled.voice) comments.push(PAUSE_VOICE_NOTE);
+                    if (reconciled.voice && !reconciled.statements) comments.push(PAUSE_VOICE_NOTE);
                     pack = reconciled.findings;
                 }
                 comments.push(`The same checks run as the Studio test ${TEST_VOICE_LEDGER}. \`problems\` are records whose voice is off its line; \`pack\` lists differences from the pack's own scan, file by file, each to be explained (warning) or noted (info).`);
