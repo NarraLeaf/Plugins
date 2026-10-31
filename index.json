@@ -44,7 +44,7 @@
     {
       "id": "mewbaka.ren2leaf-bridge",
       "name": "Ren2Leaf Bridge",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "Bring a Ren2Leaf pack into the project, so an agent porting a Ren'Py game queries it, records its progress and asks the author through Studio.",
       "publisher": "MewBaka",
       "path": "plugins/mewbaka.ren2leaf-bridge",
@@ -72,11 +72,11 @@
       },
       "permissions": [],
       "release": {
-        "tag": "mewbaka.ren2leaf-bridge@0.2.0",
-        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/mewbaka.ren2leaf-bridge%400.2.0",
-        "download": "https://github.com/NarraLeaf/Plugins/releases/download/mewbaka.ren2leaf-bridge%400.2.0/mewbaka.ren2leaf-bridge-0.2.0.zip"
+        "tag": "mewbaka.ren2leaf-bridge@0.3.0",
+        "page": "https://github.com/NarraLeaf/Plugins/releases/tag/mewbaka.ren2leaf-bridge%400.3.0",
+        "download": "https://github.com/NarraLeaf/Plugins/releases/download/mewbaka.ren2leaf-bridge%400.3.0/mewbaka.ren2leaf-bridge-0.3.0.zip"
       },
-      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/mewbaka.ren2leaf-bridge%400.2.0/plugins/mewbaka.ren2leaf-bridge/icon.png",
+      "icon": "https://raw.githubusercontent.com/NarraLeaf/Plugins/mewbaka.ren2leaf-bridge%400.3.0/plugins/mewbaka.ren2leaf-bridge/icon.png",
       "studioVersion": ">=1.8.0",
       "locales": {
         "zh-CN": {

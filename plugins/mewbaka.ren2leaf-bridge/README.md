@@ -12,7 +12,8 @@ installed and a pack is imported. The plugin gives the agent three things:
   element rectangles, and the pack's pictures, each through its own tool. Known mistakes of the
   scanner version that wrote the pack come back at the top of the rows they affect.
 - **Line records.** Where each original line landed in Studio and which voice file it carries, so a
-  scene rewrite that silently detaches voice is caught at once.
+  scene rewrite that silently detaches voice is caught at once. The records are also held against
+  the pack's own scan, file by file, so a line or a voice that was never recorded shows up too.
 - **State that outlives a context window.** The feature checklist, the author's decisions, the
   mapping log and Studio issues live in the project, under version control. A new session resumes
   from `port_status`.
@@ -30,7 +31,8 @@ Studio entry only; nothing ships with the game.
 
 The panel has four tabs: overview (the pack and progress by area), decisions (answer the agent's
 questions), checklist (accept or send back finished items) and issues (Studio problems the agent
-recorded, copyable as Markdown).
+recorded, copyable as Markdown). While the agent's questions wait for an answer, the panel's icon in
+the sidebar carries a dot and its title the count, and opening the project says how many are open.
 
 ## Agent tools
 
@@ -41,9 +43,10 @@ recorded, copyable as Markdown).
 | `pack_query` | no | Rows of the full scan, by kind |
 | `pack_screen` | no | A captured screen's element rectangles and crops, optionally the screenshot |
 | `pack_image` | no | A picture from the pack: screenshot, crop or speaker portrait |
-| `voice_check` | no | Recorded voiced lines whose voice is no longer on the line |
+| `voice_check` | no | Recorded voiced lines whose voice is no longer on the line; per-file differences from the pack's scan |
 | `ledger_upsert` | yes | Add to or update the feature checklist |
 | `decision_ask` | yes | Ask the author a question |
+| `decision_answer` | yes | Record an answer the author gave in conversation |
 | `decision_seen` | yes | Mark answers as read |
 | `issue_add` | yes | Record a Studio problem |
 | `log_note` | yes | Record a phase change or a mapping decision |
@@ -54,7 +57,9 @@ MCP clients see them as `mewbaka_ren2leaf_bridge__<tool>`. How they fit together
 `agent_guide {chapter: "plugin:mewbaka.ren2leaf-bridge"}`.
 
 The test `mewbaka.ren2leaf-bridge.voice-ledger` runs the same check as `voice_check` and fails on
-any recorded voiced line without its voice.
+any recorded voiced line without its voice. Differences from the pack's scan (say lines and voiced
+lines per source file) are reported as warnings and notes, not failures: merging `extend` lines or
+leaving out an unreachable file changes the counts on purpose.
 
 ## Development
 

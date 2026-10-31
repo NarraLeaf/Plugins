@@ -164,18 +164,26 @@ test("caveats apply by section and kind, and stop at the scanner that fixed them
 });
 
 test("a caveat about something the game does not have stays off its answers", () => {
-    // The Question as Ren2Leaf 0.2.0 scanned it: no achievements, no gallery, no auto_voice, no
-    // image statements, two endings that return, nothing excluded.
+    // A small game as Ren2Leaf 0.2.0 scanned it: no achievements, no gallery, no auto_voice, no
+    // voice, no image statements, no menus, two endings that return, nothing excluded.
     const plain: PackFacts = {
         inventory: {
             extensions: {
                 python: {
                     entries: [{ kind: "config", target: "config.has_voice", snippet: "define config.has_voice = False" }],
                     variables: [{ name: "book" }],
+                    galleries: [],
+                    interfaceVariables: [],
                 },
                 facts: { achievements: { wrappers: [], declared: [], unlockPoints: [], granted: [] } },
-                assets: { summary: { imageDefinitions: 0 } },
-                flow: { endings: [{ name: "marry" }], labels: [{ name: "start", out: [{ kind: "jump", to: "rightaway" }] }] },
+                assets: { summary: { imageDefinitions: 0 }, missing: [] },
+                flow: {
+                    entries: ["start"],
+                    endings: [{ name: "marry" }],
+                    labels: [{ name: "start", file: "script.rpy", reachable: true, out: [{ kind: "jump", to: "rightaway" }] }],
+                    menus: [{ label: "start" }],
+                },
+                speakers: { summary: { voicedLines: 0 }, voiceDirs: [] },
             },
         },
         chapters: { excluded: [] },
@@ -215,4 +223,101 @@ test("queryInventory reads the voice file of each line under auto_voice", () => 
     assert.deepEqual(queryInventory(inventory, { kind: "voice", key: "other_0a1b2c3d" }).rows.map(row => row.line), [4]);
     assert.deepEqual(queryInventory(inventory, { kind: "voice", file: "script.rpy" }).rows.map(row => row.id), ["start_915cb944"]);
     assert.equal(queryInventory({ extensions: { speakers: {} } }, { kind: "voice" }).total, 0);
+});
+
+test("each caveat holds for the scanner versions it names, and open ones stay on for later scanners", () => {
+    const ids = (list: { id: string }[]) => list.map(caveat => caveat.id).sort();
+    const everywhere = (version: string) => ids(["3", "4", "5", "6", "7", "8"].flatMap(section => caveatsForSection(section, version)))
+        .filter((id, index, all) => all.indexOf(id) === index);
+
+    // Fixed in 0.3.0: on for a 0.2.0 pack only.
+    const fixed030 = ["achievement-location", "auto-voice", "chapter-terms", "defines-as-variables", "excluded-reachable", "gallery-unknown", "image-geometry"];
+    // What a port through a 0.3.0 pack found, fixed in 0.4.0: on through 0.3.0.
+    const fixed040 = ["excluded-entry", "gallery-unlock-image", "interface-list-calls", "menu-outside-label", "missing-tag-shown", "notify-in-story", "voice-off-line"];
+    // Not fixed by any Ren2Leaf yet.
+    const open = ["screens-one-state"];
+
+    const v020 = everywhere("0.2.0");
+    for (const id of [...fixed030, ...fixed040, ...open]) assert.ok(v020.includes(id), `0.2.0 has ${id}`);
+    assert.ok(!v020.includes("image-geometry-partial"), "the 0.3.0 geometry table does not exist in 0.2.0");
+
+    const v030 = everywhere("0.3.0");
+    for (const id of fixed030) assert.ok(!v030.includes(id), `0.3.0 fixed ${id}`);
+    for (const id of [...fixed040, ...open, "image-geometry-partial"]) assert.ok(v030.includes(id), `0.3.0 has ${id}`);
+
+    // 0.4.0 and anything newer: only what nobody has fixed stays on.
+    assert.deepEqual(everywhere("0.4.0"), ["image-geometry-partial", "screens-one-state"]);
+    assert.deepEqual(everywhere("0.5.1"), everywhere("0.4.0"));
+    assert.equal(caveatsForSection("6", "0.5.1")[0]!.id, "screens-one-state");
+});
+
+test("what a port through a 0.3.0 pack found is flagged until scanner 0.4.0, for games that have it", () => {
+    // A game shaped like the one that port was: the start labels in a file the migrator excluded,
+    // voiced lines, a gallery of unlock_image groups, a menu outside every label, notify in the
+    // interface, append on an interface-only list, and a missing sprite whose tag is shown.
+    const ported: PackFacts = {
+        inventory: {
+            extensions: {
+                speakers: { summary: { voicedLines: 12 } },
+                python: {
+                    entries: [
+                        { kind: "knownApi", api: "renpy.notify", label: null, snippet: 'renpy.notify("<msg>")' },
+                        { kind: "unknownCall", callee: "pic_list.append", label: null, snippet: 'pic_list.append("<cg>")' },
+                    ],
+                    galleries: [{ button: "g1", images: [], unlocks: ["g1_a", "g1_b"] }],
+                    interfaceVariables: [{ name: "pic_list" }],
+                },
+                assets: { missing: [{ kind: "image", tag: "k1", tagShown: true, superseded: false }] },
+                flow: {
+                    entries: ["start", "splashscreen"],
+                    labels: [
+                        { name: "start", file: "boot.rpy", out: [] },
+                        { name: "ch1", file: "ch1.rpy", out: [] },
+                    ],
+                    menus: [{ label: "ch1" }, { label: null }],
+                },
+            },
+        },
+        chapters: { excluded: ["boot.rpy"] },
+    };
+    const found = [
+        ...["3", "4", "5", "7", "8"].flatMap(section => caveatsForSection(section, "0.3.0", ported)),
+        ...caveatsForKind("menu", "0.3.0", ported),
+        ...caveatsForKind("voice", "0.3.0", ported),
+    ].map(caveat => caveat.id);
+    for (const id of ["excluded-entry", "voice-off-line", "gallery-unlock-image", "menu-outside-label", "notify-in-story", "interface-list-calls", "missing-tag-shown"]) {
+        assert.ok(found.includes(id), id);
+    }
+    // A 0.4.0 pack has none of them.
+    const fixed = new Set(["excluded-entry", "voice-off-line", "gallery-unlock-image", "menu-outside-label", "notify-in-story", "interface-list-calls", "missing-tag-shown"]);
+    assert.ok(!["3", "4", "5", "7", "8"].flatMap(section => caveatsForSection(section, "0.4.0", ported)).some(caveat => fixed.has(caveat.id)));
+
+    // Excluding a file the game does not start in is not this mistake.
+    const elsewhere: PackFacts = { ...ported, chapters: { excluded: ["ch1.rpy"] } };
+    assert.ok(!caveatsForSection("5", "0.3.0", elsewhere).some(caveat => caveat.id === "excluded-entry"));
+});
+
+test("the 0.3.0 geometry table is flagged when it lists something, or when the game has an attribute hook", () => {
+    const has = (facts: PackFacts) => caveatsForKind("asset", "0.3.0", facts).some(caveat => caveat.id === "image-geometry-partial");
+    const geometry = (rows: object[], hooks: object[]): PackFacts => ({ inventory: { extensions: { assets: { geometry: rows, autoGroups: [] }, python: { entries: [], hooks } } }, chapters: null });
+    assert.ok(has(geometry([{ name: "a" }], [])));
+    assert.ok(has(geometry([], [{ hook: "config.adjust_attributes" }])));
+    assert.ok(!has(geometry([], [])));
+});
+
+test("buildPack keeps an ImageButton's other states and reads the 0.3.0 split", () => {
+    const element = compactElement({ type: "ImageButton", rect: [0, 0, 1, 1], image: "gui/start_idle.png", states: { idle: "gui/start_idle.png", hover: "gui/start_hover.png" } });
+    assert.deepEqual(element.states, { idle: "gui/start_idle.png", hover: "gui/start_hover.png" });
+    assert.equal(compactElement({ type: "Image", rect: [0, 0, 1, 1], states: {} }).states, undefined);
+
+    const built = buildPack({
+        sourcePath: "sample",
+        readme: README,
+        inventory: { ...INVENTORY, scanner: { name: "ren2leaf-diagnose", version: "0.3.0" } },
+        speakers: null,
+        chapters: { version: 2, split: { chapters: false, scenes: true, agent: false }, chapters: [{ id: "ch1", title: "", files: ["c1.rpy"] }], excluded: ["script.rpy"] },
+        elements: [],
+    }, "2026-10-28T00:00:00Z");
+    const chapters = built.decisions.find(decision => decision.id === "pack:chapters")!;
+    assert.match(chapters.answer!.text!, /^Split: chapters one chapter, scenes one per label\. ch1: c1\.rpy\. Excluded: script\.rpy\.$/);
 });

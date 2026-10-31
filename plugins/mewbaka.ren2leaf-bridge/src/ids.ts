@@ -25,6 +25,7 @@ export const TOOL = {
     voiceCheck: `${PLUGIN_ID}.voice_check`,
     ledgerUpsert: `${PLUGIN_ID}.ledger_upsert`,
     decisionAsk: `${PLUGIN_ID}.decision_ask`,
+    decisionAnswer: `${PLUGIN_ID}.decision_answer`,
     decisionSeen: `${PLUGIN_ID}.decision_seen`,
     issueAdd: `${PLUGIN_ID}.issue_add`,
     logNote: `${PLUGIN_ID}.log_note`,

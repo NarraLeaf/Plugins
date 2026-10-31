@@ -6,10 +6,13 @@
 import { advertisedName, TOOL } from "./ids";
 import { answerSummary } from "./model";
 import { LEDGER_AREAS, LEDGER_STATUSES, type BridgeState, type LedgerStatus } from "./types";
+import { PAUSE_VOICE_NOTE, reconcileSummary, reconcileWithPack } from "./reconcile";
 import type { VoiceReport } from "./voice";
 import { describeRanges } from "./voice";
 
 export const NOTICE_LIMIT = 3;
+/** Differences from the pack listed in `port_status`; `voice_check` lists them all. */
+const RECONCILE_LIMIT = 6;
 const TEXT_LIMIT = 58_000;
 
 const tool = (name: string) => advertisedName(name);
@@ -118,6 +121,15 @@ export function portStatus(state: BridgeState, voice: VoiceReport | null): strin
     const sceneCount = Object.keys(state.lines.scenes).length;
     const lineCount = Object.values(state.lines.scenes).reduce((sum, scene) => sum + scene.lines.length, 0);
     lines.push(`Line records: ${lineCount} lines in ${sceneCount} scenes.${voice ? ` Voice: ${voiceSummary(voice)}` : ""}`);
+    if (pack && lineCount) {
+        // The records only know what was recorded; the pack's scan knows what the source has.
+        const report = reconcileWithPack(state.lines, state.inventory?.inventory ?? null, pack.chapters);
+        lines.push(`  ${reconcileSummary(report)}`);
+        const warnings = report.findings.filter(finding => finding.level === "warning");
+        for (const finding of warnings.slice(0, RECONCILE_LIMIT)) lines.push(`  ${finding.text}`);
+        if (warnings.length > RECONCILE_LIMIT) lines.push(`  ${warnings.length - RECONCILE_LIMIT} more; ${tool(TOOL.voiceCheck)} lists every difference.`);
+        if (report.voice && !report.statements) lines.push(`  ${PAUSE_VOICE_NOTE}`);
+    }
 
     const recent = state.log.entries.slice(-10);
     if (recent.length) {
