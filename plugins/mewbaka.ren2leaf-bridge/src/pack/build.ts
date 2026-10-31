@@ -13,7 +13,7 @@ import type {
 } from "../types";
 import { parseShotTable, splitReadme } from "./readme";
 
-/** Inventory schema versions this release reads. Ren2Leaf 0.2.0 writes 2. */
+/** Inventory schema versions this release reads. Ren2Leaf 0.2.0 and 0.3.0 write 2. */
 export const SUPPORTED_SCHEMA = { min: 1, max: 2 } as const;
 
 export type RawPack = {
@@ -144,6 +144,8 @@ export function compactElement(element: Record<string, unknown>): ScreenElement 
     if (Array.isArray(element.location) && element.location.length === 2) {
         out.location = `${element.location[0]}:${element.location[1]}`;
     }
+    // An ImageButton's other images (hover, selected…): the screenshot shows only one of them.
+    if (isRecord(element.states) && Object.keys(element.states).length) out.states = element.states;
     if (element.inButton) out.inButton = true;
     if (element.transformed) out.transformed = true;
     return out;
@@ -156,6 +158,18 @@ function describeSpeaker(entry: Record<string, unknown>): string {
         parts.push(`${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
     }
     return parts.join("; ");
+}
+
+/**
+ * How the migrator split the script. Ren2Leaf 0.3.0 writes `split: {chapters, scenes, agent}` (each
+ * flag true, false or null for "not chosen"); earlier packs wrote one `mode`.
+ */
+function describeSplit(chapters: Record<string, unknown>): string {
+    const split = chapters.split;
+    if (!isRecord(split)) return `Split mode: ${str(chapters.mode) ?? "?"}.`;
+    if (split.agent === true) return "Split: the migrator left chapters and scenes to the agent.";
+    const flag = (value: unknown, yes: string, no: string) => (value === true ? yes : value === false ? no : "not chosen");
+    return `Split: chapters ${flag(split.chapters, "split", "one chapter")}, scenes ${flag(split.scenes, "one per label", "one per chapter")}.`;
 }
 
 /** The migrator's settled decisions, so the agent and the author see them beside the open ones. */
@@ -191,7 +205,7 @@ export function packDecisions(speakers: unknown, chapters: unknown, now: string)
             source: [],
             options: [],
             status: "answered",
-            answer: { text: `Split mode: ${str(chapters.mode) ?? "?"}. ${lines.join(" | ")}.${excluded}`, at: str(chapters.updatedAt) ?? now },
+            answer: { text: `${describeSplit(chapters)} ${lines.join(" | ")}.${excluded}`, at: str(chapters.updatedAt) ?? now },
             seenByAgent: true,
             askedAt: str(chapters.updatedAt) ?? now,
         });
